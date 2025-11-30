@@ -6,6 +6,11 @@ from service.agents.abstract.user_request_agent import RequestAgent
 from service.agents.abstract.directory_agent import DirectoryAgent
 from service.agents.abstract.event_agents import AddEventAgent, DeleteEventAgent, ShowEventAgent
 
+from sc_client.models import ScAddr, ScIdtfResolveParams
+from sc_client.constants import sc_types
+import sc_client.client as client
+
+
 def reg_agent(gender, surname: str, name: str, fname: str, birthdate, reg_place: str, username: str, password: str):
     """
     Метод для запуска агента регистрации
@@ -104,3 +109,49 @@ def show_event_agent(username):
     return agent.show_event_agent(
         username=username
     )
+
+
+def test_agent_get_question(user_id: str):
+    """Получить следующий вопрос"""
+    agent = current_app.config['agents']['test_agent']
+    return agent.get_next_question(user_id)
+
+
+def test_agent_get_answers(question_addr):
+    """Получить варианты ответов"""
+    agent = current_app.config['agents']['test_agent']
+    return agent.get_answers_for_question(question_addr)
+
+
+def test_agent_save_answer(answer_id: str, user_id: str):
+    """Сохранить ответ пользователя"""
+    import sc_client.client as client
+    from sc_client.models import ScIdtfResolveParams
+    from sc_client.constants import sc_types
+    
+    agent = current_app.config['agents']['test_agent']
+    answer_addr = client.resolve_keynodes(ScIdtfResolveParams(idtf=answer_id, type=sc_types.NODE_CONST))[0]
+    return agent.save_answer(user_id, answer_addr)
+
+
+def test_agent_check_answer(question_id: str, user_id: str):
+    """Проверить ответ"""
+    import sc_client.client as client
+    from sc_client.models import ScIdtfResolveParams
+    from sc_client.constants import sc_types
+    
+    agent = current_app.config['agents']['test_agent']
+    question_addr = client.resolve_keynodes(ScIdtfResolveParams(idtf=question_id, type=sc_types.NODE_CONST))[0]
+    return agent.check_answer(user_id, question_addr)
+
+
+def test_agent_delete_old_data(user_id: str):
+    """Удалить старые данные теста"""
+    agent = current_app.config['agents']['test_agent']
+    return agent.delete_old_test_data(user_id)
+
+
+def test_agent_update_rating(user_id: str):
+    """Обновить рейтинг пользователя"""
+    agent = current_app.config['agents']['test_agent']
+    return agent.update_rating(user_id)

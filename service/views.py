@@ -21,6 +21,16 @@ from .services import (
 
 from .forms import LoginForm, RegistrationForm, AddEventForm
 
+from .services import (
+    # ... существующие импорты
+    test_agent_get_question,
+    test_agent_get_answers,
+    test_agent_save_answer,
+    test_agent_check_answer,
+    test_agent_delete_old_data,
+    test_agent_update_rating
+)
+
 main = Blueprint("main", __name__)
 
 @main.route("/index")
@@ -251,3 +261,239 @@ def templates():
     :return: Разметка страницы
     """
     return render_template("templates.html")
+
+# ============ TEST ROUTES ============
+
+def get_user_login_from_current_user():
+    """Получить строку логина из current_user"""
+    from sc_client.client import get_link_content
+    link_content_list = get_link_content(current_user.username)
+    return link_content_list[0].data
+
+
+@main.route("/test")
+@login_required
+def test_page():
+    """Страница с тестом"""
+    return render_template("test.html")
+
+
+@main.route("/api/test/start", methods=["POST"])
+@login_required
+def test_start():
+    """API: Начать новый тест"""
+    user_login = get_user_login_from_current_user()
+    result = test_agent_delete_old_data(user_login)
+    
+    if result['status'] == 'valid':
+        return {"success": True, "message": "Тест начат"}
+    return {"success": False, "message": result.get('message', 'Ошибка')}, 400
+
+@main.route("/api/test/question", methods=["GET"])
+@login_required
+def test_get_question():
+    """API: Получить следующий вопрос"""
+    try:
+        user_login = get_user_login_from_current_user()
+        result = test_agent_get_question(user_login)
+
+        print(f"DEBUG test_get_question result: {result}")
+
+        if result['status'] == 'valid':
+            question_addr = result.get('question_addr')
+
+            if not question_addr:
+                return {"success": False, "message": "Вопрос не найден"}, 404
+
+            import sc_client.client as client
+            from sc_client.models import ScIdtfResolveParams, ScTemplate  # <- ДОБАВИТЬ ScTemplate
+            from sc_client.constants import sc_types
+
+            # Ищем системный идентификатор вопроса (nrel_system_identifier)
+            nrel_system_identifier = client.resolve_keynodes(
+                ScIdtfResolveParams(idtf='nrel_system_identifier', type=sc_types.NODE_CONST_NOROLE)
+            )[0]
+            
+            # Шаблон для поиска системного идентификатора
+            sys_id_template = ScTemplate()
+            sys_id_template.quintuple(
+                question_addr,
+                sc_types.EDGE_D_COMMON_VAR,
+                sc_types.LINK_VAR >> "_sys_id_link",
+                sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                nrel_system_identifier
+            )
+            
+            sys_id_result = client.template_search(sys_id_template)
+            
+            question_id = str(question_addr.value)
+            if sys_id_result and len(sys_id_result) > 0:
+                sys_id_link = sys_id_result[0].get("_sys_id_link")
+                sys_id_content = client.get_link_content(sys_id_link)
+                if sys_id_content:
+                    question_id = sys_id_content[0].data
+            
+            # Ищем текст вопроса (nrel_main_idtf)
+            nrel_main_idtf = client.resolve_keynodes(
+                ScIdtfResolveParams(idtf='nrel_main_idtf', type=sc_types.NODE_CONST_NOROLE)
+            )[0]
+            
+            main_idtf_template = ScTemplate()
+            main_idtf_template.quintuple(
+                question_addr,
+                sc_types.EDGE_D_COMMON_VAR,
+                sc_types.LINK_VAR >> "_main_idtf_link",
+                sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                nrel_main_idtf
+            )
+            
+            main_idtf_result = client.template_search(main_idtf_template)
+            
+            question_text = question_id
+            if main_idtf_result and len(main_idtf_result) > 0:
+                main_idtf_link = main_idtf_result[0].get("_main_idtf_link")
+                main_idtf_content = client.get_link_content(main_idtf_link)
+                if main_idtf_content:
+                    question_text = main_idtf_content[0].data
+
+            return {
+                "success": True,
+                "question": {
+                    "id": question_id,
+                    "text": question_text,
+                    "addr": str(question_addr.value)
+                }
+            }, 200
+        else:
+            return {"success": False, "message": result.get('message', 'Не удалось получить вопрос')}, 404
+    except Exception as e:
+        print(f"ERROR in test_get_question: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "message": str(e)}, 500
+
+
+@main.route("/api/test/answer", methods=["POST"])
+@login_required
+def test_submit_answer():
+    """API: Отправить ответ"""
+    data = request.get_json()
+    question_id = data.get('question_id')
+    answer_id = data.get('answer_id')
+    user_login = get_user_login_from_current_user()
+    
+    if not question_id or not answer_id:
+        return {"success": False, "message": "Отсутствуют данные"}, 400
+    
+    save_result = test_agent_save_answer(answer_id, user_login)
+    
+    if save_result['status'] != 'valid':
+        return {"success": False, "message": "Ошибка сохранения"}, 400
+    
+    check_result = test_agent_check_answer(question_id, user_login)
+    
+    if check_result['status'] == 'valid':
+        return {
+            "success": True,
+            "is_correct": check_result.get('is_correct', False),
+            "score": check_result.get('score', 0)
+        }
+    
+    return {"success": False, "message": "Ошибка проверки"}, 400
+
+
+@main.route("/api/test/rating", methods=["GET"])
+@login_required
+def test_get_rating():
+    """API: Получить рейтинг"""
+    user_login = get_user_login_from_current_user()
+    result = test_agent_update_rating(user_login)
+    
+    if result['status'] == 'valid':
+        return {
+            "success": True,
+            "rating": result.get('rating', 0)
+        }
+    
+    return {"success": False, "message": "Ошибка получения рейтинга"}, 400
+
+
+@main.route("/api/test/finish", methods=["POST"])
+@login_required
+def test_finish():
+    """API: Завершить тест"""
+    user_login = get_user_login_from_current_user()
+    result = test_agent_update_rating(user_login)
+    
+    if result['status'] == 'valid':
+        return {
+            "success": True,
+            "rating": result.get('rating', 0),
+            "message": "Тест завершен!"
+        }
+    
+    return {"success": False, "message": "Ошибка завершения"}, 400
+
+@main.route("/api/test/answers/<question_id>", methods=["GET"])
+@login_required
+def test_get_answers(question_id):
+    """API: Получить варианты ответов для вопроса"""
+    try:
+        import sc_client.client as client
+        from sc_client.models import ScIdtfResolveParams, ScAddr, ScTemplate
+        from sc_client.constants import sc_types
+        
+        # question_id - это строка с числом, например "66320"
+        question_addr = ScAddr(int(question_id))
+        
+        # Вызываем агента для поиска ответов
+        result = test_agent_get_answers(question_addr)  # <- Передаём ScAddr, а не строку
+        
+        print(f"DEBUG test_get_answers result: {result}")
+        
+        if result['status'] == 'valid':
+            answers_list = []
+            
+            for answer_item in result.get('answers', []):
+                answer_addr = answer_item['answer_addr']
+                
+                # Получаем текст ответа (nrel_main_idtf)
+                nrel_main_idtf = client.resolve_keynodes(
+                    ScIdtfResolveParams(idtf='nrel_main_idtf', type=sc_types.NODE_CONST_NOROLE)
+                )[0]
+                
+                answer_template = ScTemplate()
+                answer_template.quintuple(
+                    answer_addr,
+                    sc_types.EDGE_D_COMMON_VAR,
+                    sc_types.LINK_VAR >> "_answer_link",
+                    sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                    nrel_main_idtf
+                )
+                
+                answer_result = client.template_search(answer_template)
+                
+                answer_text = str(answer_addr.value)
+                if answer_result and len(answer_result) > 0:
+                    answer_link = answer_result[0].get("_answer_link")
+                    answer_content = client.get_link_content(answer_link)
+                    if answer_content:
+                        answer_text = answer_content[0].data
+                
+                answers_list.append({
+                    "id": str(answer_addr.value),
+                    "text": answer_text,
+                    "addr": str(answer_addr.value)
+                })
+            
+            return {
+                "success": True,
+                "answers": answers_list
+            }, 200
+        else:
+            return {"success": False, "message": "Не удалось получить ответы"}, 404
+    except Exception as e:
+        print(f"ERROR in test_get_answers: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "message": str(e)}, 500
