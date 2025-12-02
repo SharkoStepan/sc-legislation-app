@@ -123,26 +123,20 @@ def test_agent_get_answers(question_addr):
     return agent.get_answers_for_question(question_addr)
 
 
-def test_agent_save_answer(answer_id: str, user_id: str):
+def test_agent_save_answer(answer_id, user_id: str):
     """Сохранить ответ пользователя"""
-    import sc_client.client as client
-    from sc_client.models import ScIdtfResolveParams
-    from sc_client.constants import sc_types
-    
+    # answer_id уже ScAddr, не нужно конвертировать
     agent = current_app.config['agents']['test_agent']
-    answer_addr = client.resolve_keynodes(ScIdtfResolveParams(idtf=answer_id, type=sc_types.NODE_CONST))[0]
-    return agent.save_answer(user_id, answer_addr)
+    return agent.save_answer(user_id, answer_id)
 
 
-def test_agent_check_answer(question_id: str, user_id: str):
+
+def test_agent_check_answer(question_id, user_id: str):
     """Проверить ответ"""
-    import sc_client.client as client
-    from sc_client.models import ScIdtfResolveParams
-    from sc_client.constants import sc_types
-    
+    # question_id уже ScAddr, не нужно конвертировать
     agent = current_app.config['agents']['test_agent']
-    question_addr = client.resolve_keynodes(ScIdtfResolveParams(idtf=question_id, type=sc_types.NODE_CONST))[0]
-    return agent.check_answer(user_id, question_addr)
+    return agent.check_answer(user_id, question_id)
+
 
 
 def test_agent_delete_old_data(user_id: str):

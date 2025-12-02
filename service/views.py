@@ -306,60 +306,37 @@ def test_get_question():
                 return {"success": False, "message": "Вопрос не найден"}, 404
 
             import sc_client.client as client
-            from sc_client.models import ScIdtfResolveParams, ScTemplate  # <- ДОБАВИТЬ ScTemplate
+            from sc_client.models import ScIdtfResolveParams, ScTemplate
             from sc_client.constants import sc_types
 
-            # Ищем системный идентификатор вопроса (nrel_system_identifier)
-            nrel_system_identifier = client.resolve_keynodes(
-                ScIdtfResolveParams(idtf='nrel_system_identifier', type=sc_types.NODE_CONST_NOROLE)
+            # Ищем текст вопроса через nrel_content
+            nrel_content = client.resolve_keynodes(
+                ScIdtfResolveParams(idtf='nrel_content', type=sc_types.NODE_CONST_NOROLE)
             )[0]
             
-            # Шаблон для поиска системного идентификатора
-            sys_id_template = ScTemplate()
-            sys_id_template.quintuple(
+            # Шаблон для поиска контента вопроса
+            content_template = ScTemplate()
+            content_template.quintuple(
                 question_addr,
                 sc_types.EDGE_D_COMMON_VAR,
-                sc_types.LINK_VAR >> "_sys_id_link",
+                sc_types.LINK_VAR >> "_content_link",
                 sc_types.EDGE_ACCESS_VAR_POS_PERM,
-                nrel_system_identifier
+                nrel_content
             )
             
-            sys_id_result = client.template_search(sys_id_template)
+            content_result = client.template_search(content_template)
             
-            question_id = str(question_addr.value)
-            if sys_id_result and len(sys_id_result) > 0:
-                sys_id_link = sys_id_result[0].get("_sys_id_link")
-                sys_id_content = client.get_link_content(sys_id_link)
-                if sys_id_content:
-                    question_id = sys_id_content[0].data
-            
-            # Ищем текст вопроса (nrel_main_idtf)
-            nrel_main_idtf = client.resolve_keynodes(
-                ScIdtfResolveParams(idtf='nrel_main_idtf', type=sc_types.NODE_CONST_NOROLE)
-            )[0]
-            
-            main_idtf_template = ScTemplate()
-            main_idtf_template.quintuple(
-                question_addr,
-                sc_types.EDGE_D_COMMON_VAR,
-                sc_types.LINK_VAR >> "_main_idtf_link",
-                sc_types.EDGE_ACCESS_VAR_POS_PERM,
-                nrel_main_idtf
-            )
-            
-            main_idtf_result = client.template_search(main_idtf_template)
-            
-            question_text = question_id
-            if main_idtf_result and len(main_idtf_result) > 0:
-                main_idtf_link = main_idtf_result[0].get("_main_idtf_link")
-                main_idtf_content = client.get_link_content(main_idtf_link)
-                if main_idtf_content:
-                    question_text = main_idtf_content[0].data
+            question_text = str(question_addr.value)  # По умолчанию
+            if content_result and len(content_result) > 0:
+                content_link = content_result[0].get("_content_link")
+                content_data = client.get_link_content(content_link)
+                if content_data:
+                    question_text = content_data[0].data
 
             return {
                 "success": True,
                 "question": {
-                    "id": question_id,
+                    "id": str(question_addr.value),
                     "text": question_text,
                     "addr": str(question_addr.value)
                 }
@@ -372,34 +349,42 @@ def test_get_question():
         traceback.print_exc()
         return {"success": False, "message": str(e)}, 500
 
-
 @main.route("/api/test/answer", methods=["POST"])
 @login_required
-def test_submit_answer():
-    """API: Отправить ответ"""
-    data = request.get_json()
-    question_id = data.get('question_id')
-    answer_id = data.get('answer_id')
-    user_login = get_user_login_from_current_user()
-    
-    if not question_id or not answer_id:
-        return {"success": False, "message": "Отсутствуют данные"}, 400
-    
-    save_result = test_agent_save_answer(answer_id, user_login)
-    
-    if save_result['status'] != 'valid':
-        return {"success": False, "message": "Ошибка сохранения"}, 400
-    
-    check_result = test_agent_check_answer(question_id, user_login)
-    
-    if check_result['status'] == 'valid':
-        return {
-            "success": True,
-            "is_correct": check_result.get('is_correct', False),
-            "score": check_result.get('score', 0)
-        }
-    
-    return {"success": False, "message": "Ошибка проверки"}, 400
+def test_save_answer():
+    """API: Сохранить ответ пользователя"""
+    try:
+        data = request.get_json()
+        question_id = data.get('question_id')
+        answer_id = data.get('answer_id')
+        
+        user_login = get_user_login_from_current_user()
+        
+        # Преобразуем answer_id в ScAddr
+        from sc_client.models import ScAddr
+        answer_addr = ScAddr(int(answer_id))
+        
+        # Сохраняем ответ - передаём напрямую ScAddr
+        save_result = test_agent_save_answer(answer_addr, user_login)
+        
+        if save_result['status'] == 'valid':
+            # Проверяем правильность
+            question_addr = ScAddr(int(question_id))
+            check_result = test_agent_check_answer(question_addr, user_login)
+            
+            is_correct = check_result.get('status') == 'valid'
+            
+            return {
+                "success": True,
+                "is_correct": is_correct
+            }, 200
+        else:
+            return {"success": False, "message": "Ошибка сохранения"}, 400
+    except Exception as e:
+        print(f"Error in save_answer: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "message": str(e)}, 400
 
 
 @main.route("/api/test/rating", methods=["GET"])
@@ -443,41 +428,39 @@ def test_get_answers(question_id):
         from sc_client.models import ScIdtfResolveParams, ScAddr, ScTemplate
         from sc_client.constants import sc_types
         
-        # question_id - это строка с числом, например "66320"
         question_addr = ScAddr(int(question_id))
-        
-        # Вызываем агента для поиска ответов
-        result = test_agent_get_answers(question_addr)  # <- Передаём ScAddr, а не строку
+        result = test_agent_get_answers(question_addr)
         
         print(f"DEBUG test_get_answers result: {result}")
         
         if result['status'] == 'valid':
             answers_list = []
             
+            # Получаем nrel_content для текстов ответов
+            nrel_content = client.resolve_keynodes(
+                ScIdtfResolveParams(idtf='nrel_content', type=sc_types.NODE_CONST_NOROLE)
+            )[0]
+            
             for answer_item in result.get('answers', []):
                 answer_addr = answer_item['answer_addr']
                 
-                # Получаем текст ответа (nrel_main_idtf)
-                nrel_main_idtf = client.resolve_keynodes(
-                    ScIdtfResolveParams(idtf='nrel_main_idtf', type=sc_types.NODE_CONST_NOROLE)
-                )[0]
-                
+                # Ищем текст ответа через nrel_content
                 answer_template = ScTemplate()
                 answer_template.quintuple(
                     answer_addr,
                     sc_types.EDGE_D_COMMON_VAR,
                     sc_types.LINK_VAR >> "_answer_link",
                     sc_types.EDGE_ACCESS_VAR_POS_PERM,
-                    nrel_main_idtf
+                    nrel_content
                 )
                 
                 answer_result = client.template_search(answer_template)
                 
-                answer_text = str(answer_addr.value)
+                answer_text = str(answer_addr.value)  # По умолчанию показываем ID
                 if answer_result and len(answer_result) > 0:
                     answer_link = answer_result[0].get("_answer_link")
                     answer_content = client.get_link_content(answer_link)
-                    if answer_content:
+                    if answer_content and len(answer_content) > 0:
                         answer_text = answer_content[0].data
                 
                 answers_list.append({
@@ -497,3 +480,4 @@ def test_get_answers(question_id):
         import traceback
         traceback.print_exc()
         return {"success": False, "message": str(e)}, 500
+

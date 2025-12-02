@@ -1014,26 +1014,26 @@ class Ostis:
             user = get_user_by_login(username)
             if not user:
                 raise Exception(f"User node for {username} not found")
-            
+
             rrel_1 = client.resolve_keynodes(ScIdtfResolveParams(idtf='rrel_1', type=sc_types.NODE_CONST_ROLE))[0]
             rrel_2 = client.resolve_keynodes(ScIdtfResolveParams(idtf='rrel_2', type=sc_types.NODE_CONST_ROLE))[0]
             initiated_node = client.resolve_keynodes(ScIdtfResolveParams(idtf='action_initiated', type=sc_types.NODE_CONST_CLASS))[0]
             action_agent = client.resolve_keynodes(ScIdtfResolveParams(idtf=action_name, type=sc_types.NODE_CONST_CLASS))[0]
             main_node = get_node(client)
-            
+
             template = ScTemplate()
             template.triple_with_relation(main_node >> "_main_node", sc_types.EDGE_ACCESS_VAR_POS_PERM, answer_addr, sc_types.EDGE_ACCESS_VAR_POS_PERM, rrel_1)
             template.triple_with_relation("_main_node", sc_types.EDGE_ACCESS_VAR_POS_PERM, user, sc_types.EDGE_ACCESS_VAR_POS_PERM, rrel_2)
             template.triple(action_agent, sc_types.EDGE_ACCESS_VAR_POS_PERM, "_main_node")
             template.triple(initiated_node, sc_types.EDGE_ACCESS_VAR_POS_PERM, "_main_node")
-            
+
             event_params = ScEventSubscriptionParams(main_node, ScEventType.AFTER_GENERATE_INCOMING_ARC, call_back)
             client.events_create(event_params)
             client.template_generate(template)
-            
+
             global payload
             payload = None
-            
+
             if callback_event.wait(timeout=30):
                 while not payload:
                     continue
@@ -1042,6 +1042,7 @@ class Ostis:
                 raise AgentError(524, "Timeout")
         else:
             raise ScServerError
+
 
     def call_check_answer_agent(self, action_name: str, username: str, question_addr) -> dict:
         """Вызов CheckTheAnswerAgent"""
@@ -1105,94 +1106,8 @@ class Ostis:
                 raise AgentError(524, "Timeout")
         else:
             raise ScServerError
-
-
-    def call_save_answer_agent(self, action_name: str, username: str, answer_addr: ScAddr) -> dict:
-        """Вызов SaveAnswerAgent"""
-        if is_connected():
-            rrel_1 = client.resolve_keynodes(ScIdtfResolveParams(idtf='rrel_1', type=sc_types.NODE_CONST_ROLE))[0]
-            rrel_2 = client.resolve_keynodes(ScIdtfResolveParams(idtf='rrel_2', type=sc_types.NODE_CONST_ROLE))[0]
-            initiated_node = client.resolve_keynodes(ScIdtfResolveParams(idtf='action_initiated', type=sc_types.NODE_CONST_CLASS))[0]
-            action_agent = client.resolve_keynodes(ScIdtfResolveParams(idtf=action_name, type=sc_types.NODE_CONST_CLASS))[0]
-            main_node = get_node(client)
-            
-            user_login_links = search_links_by_contents([username])
-            if username not in user_login_links or not user_login_links[username]:
-                raise Exception(f"User {username} not found")
-            login_link = user_login_links[username][0]
-            
-            nrel_login = client.resolve_keynodes(ScIdtfResolveParams(idtf='nrel_login', type=sc_types.NODE_CONST_NO_ROLE))[0]
-            user_template = ScTemplate()
-            user_template.triple_with_relation(sc_types.NODE_VAR >> "_user", sc_types.EDGE_D_COMMON_VAR, login_link, sc_types.EDGE_ACCESS_VAR_POS_PERM, nrel_login)
-            user_result = client.template_search(user_template)
-            if not user_result:
-                raise Exception(f"User node for {username} not found")
-            user = user_result[0].get("_user")
-            
-            template = ScTemplate()
-            template.triple_with_relation(main_node >> "_main_node", sc_types.EDGE_ACCESS_VAR_POS_PERM, answer_addr, sc_types.EDGE_ACCESS_VAR_POS_PERM, rrel_1)
-            template.triple_with_relation(main_node >> "_main_node", sc_types.EDGE_ACCESS_VAR_POS_PERM, user, sc_types.EDGE_ACCESS_VAR_POS_PERM, rrel_2)
-            template.triple(action_agent, sc_types.EDGE_ACCESS_VAR_POS_PERM, "_main_node")
-            template.triple(initiated_node, sc_types.EDGE_ACCESS_VAR_POS_PERM, "_main_node")
-            
-            event_params = ScEventSubscriptionParams(main_node, ScEventType.AFTER_GENERATE_INCOMING_ARC, call_back)
-            client.events_create(event_params)
-            client.template_generate(template)
-            
-            global payload
-            if callback_event.wait(timeout=10):
-                while not payload:
-                    continue
-                return payload
-            else:
-                raise AgentError(524, "Timeout")
-        else:
-            raise ScServerError
-
-
-    def call_check_answer_agent(self, action_name: str, username: str, question_addr: ScAddr) -> dict:
-        """Вызов CheckTheAnswerAgent"""
-        if is_connected():
-            rrel_1 = client.resolve_keynodes(ScIdtfResolveParams(idtf='rrel_1', type=sc_types.NODE_CONST_ROLE))[0]
-            rrel_2 = client.resolve_keynodes(ScIdtfResolveParams(idtf='rrel_2', type=sc_types.NODE_CONST_ROLE))[0]
-            initiated_node = client.resolve_keynodes(ScIdtfResolveParams(idtf='action_initiated', type=sc_types.NODE_CONST_CLASS))[0]
-            action_agent = client.resolve_keynodes(ScIdtfResolveParams(idtf=action_name, type=sc_types.NODE_CONST_CLASS))[0]
-            main_node = get_node(client)
-            
-            user_login_links = search_links_by_contents([username])
-            if username not in user_login_links or not user_login_links[username]:
-                raise Exception(f"User {username} not found")
-            login_link = user_login_links[username][0]
-            
-            nrel_login = client.resolve_keynodes(ScIdtfResolveParams(idtf='nrel_login', type=sc_types.NODE_CONST_NO_ROLE))[0]
-            user_template = ScTemplate()
-            user_template.triple_with_relation(sc_types.NODE_VAR >> "_user", sc_types.EDGE_D_COMMON_VAR, login_link, sc_types.EDGE_ACCESS_VAR_POS_PERM, nrel_login)
-            user_result = client.template_search(user_template)
-            if not user_result:
-                raise Exception(f"User node for {username} not found")
-            user = user_result[0].get("_user")
-            
-            template = ScTemplate()
-            template.triple_with_relation(main_node >> "_main_node", sc_types.EDGE_ACCESS_VAR_POS_PERM, question_addr, sc_types.EDGE_ACCESS_VAR_POS_PERM, rrel_1)
-            template.triple_with_relation(main_node >> "_main_node", sc_types.EDGE_ACCESS_VAR_POS_PERM, user, sc_types.EDGE_ACCESS_VAR_POS_PERM, rrel_2)
-            template.triple(action_agent, sc_types.EDGE_ACCESS_VAR_POS_PERM, "_main_node")
-            template.triple(initiated_node, sc_types.EDGE_ACCESS_VAR_POS_PERM, "_main_node")
-            
-            event_params = ScEventSubscriptionParams(main_node, ScEventType.AFTER_GENERATE_INCOMING_ARC, call_back)
-            client.events_create(event_params)
-            client.template_generate(template)
-            
-            global payload
-            if callback_event.wait(timeout=10):
-                while not payload:
-                    continue
-                return payload
-            else:
-                raise AgentError(524, "Timeout")
-        else:
-            raise ScServerError
-
-
+    
+    
     def call_delete_old_nodes_agent(self, action_name: str, username: str) -> dict:
         """Вызов DeleteOldNodesAgent"""
         if is_connected():
@@ -1301,198 +1216,6 @@ class Ostis:
                 raise AgentError(524, "Timeout")
         else:
             raise ScServerError
-
-
-
-
-# def call_search_answers_agent(self, action_name: str, question_addr: ScAddr) -> dict:
-#     """Вызов SearchAnswersForQuestionAgent"""
-#     if is_connected():
-#         rrel_1 = client.resolve_keynodes(ScIdtfResolveParams(idtf='rrel_1', type=sc_types.NODE_CONST_ROLE))[0]
-#         initiated_node = client.resolve_keynodes(ScIdtfResolveParams(idtf='action_initiated', type=sc_types.NODE_CONST_CLASS))[0]
-#         action_agent = client.resolve_keynodes(ScIdtfResolveParams(idtf=action_name, type=sc_types.NODE_CONST_CLASS))[0]
-#         main_node = get_node(client)
-        
-#         template = ScTemplate()
-#         template.triple_with_relation(
-#             main_node >> "_main_node",
-#             sc_types.EDGE_ACCESS_VAR_POS_PERM,
-#             question_addr,
-#             sc_types.EDGE_ACCESS_VAR_POS_PERM,
-#             rrel_1
-#         )
-#         template.triple(action_agent, sc_types.EDGE_ACCESS_VAR_POS_PERM, "_main_node")
-#         template.triple(initiated_node, sc_types.EDGE_ACCESS_VAR_POS_PERM, "_main_node")
-        
-#         event_params = ScEventSubscriptionParams(main_node, ScEventType.AFTER_GENERATE_INCOMING_ARC, call_back)
-#         client.events_create(event_params)
-#         client.template_generate(template)
-        
-#         global payload
-#         if callback_event.wait(timeout=10):
-#             while not payload:
-#                 continue
-#             return payload
-#         else:
-#             raise AgentError(524, "Timeout")
-#     else:
-#         raise ScServerError
-
-
-# def call_save_answer_agent(self, action_name: str, username: str, answer_addr: ScAddr) -> dict:
-#     """Вызов SaveAnswerAgent"""
-#     if is_connected():
-#         rrel_1 = client.resolve_keynodes(ScIdtfResolveParams(idtf='rrel_1', type=sc_types.NODE_CONST_ROLE))[0]
-#         rrel_2 = client.resolve_keynodes(ScIdtfResolveParams(idtf='rrel_2', type=sc_types.NODE_CONST_ROLE))[0]
-#         initiated_node = client.resolve_keynodes(ScIdtfResolveParams(idtf='action_initiated', type=sc_types.NODE_CONST_CLASS))[0]
-#         action_agent = client.resolve_keynodes(ScIdtfResolveParams(idtf=action_name, type=sc_types.NODE_CONST_CLASS))[0]
-#         main_node = get_node(client)
-#         user = get_user_by_login(username)
-        
-#         template = ScTemplate()
-#         template.triple_with_relation(
-#             main_node >> "_main_node",
-#             sc_types.EDGE_ACCESS_VAR_POS_PERM,
-#             answer_addr,
-#             sc_types.EDGE_ACCESS_VAR_POS_PERM,
-#             rrel_1
-#         )
-#         template.triple_with_relation(
-#             main_node >> "_main_node",
-#             sc_types.EDGE_ACCESS_VAR_POS_PERM,
-#             user,
-#             sc_types.EDGE_ACCESS_VAR_POS_PERM,
-#             rrel_2
-#         )
-#         template.triple(action_agent, sc_types.EDGE_ACCESS_VAR_POS_PERM, "_main_node")
-#         template.triple(initiated_node, sc_types.EDGE_ACCESS_VAR_POS_PERM, "_main_node")
-        
-#         event_params = ScEventSubscriptionParams(main_node, ScEventType.AFTER_GENERATE_INCOMING_ARC, call_back)
-#         client.events_create(event_params)
-#         client.template_generate(template)
-        
-#         global payload
-#         if callback_event.wait(timeout=10):
-#             while not payload:
-#                 continue
-#             return payload
-#         else:
-#             raise AgentError(524, "Timeout")
-#     else:
-#         raise ScServerError
-
-
-# def call_check_answer_agent(self, action_name: str, username: str, question_addr: ScAddr) -> dict:
-#     """Вызов CheckTheAnswerAgent"""
-#     if is_connected():
-#         rrel_1 = client.resolve_keynodes(ScIdtfResolveParams(idtf='rrel_1', type=sc_types.NODE_CONST_ROLE))[0]
-#         rrel_2 = client.resolve_keynodes(ScIdtfResolveParams(idtf='rrel_2', type=sc_types.NODE_CONST_ROLE))[0]
-#         initiated_node = client.resolve_keynodes(ScIdtfResolveParams(idtf='action_initiated', type=sc_types.NODE_CONST_CLASS))[0]
-#         action_agent = client.resolve_keynodes(ScIdtfResolveParams(idtf=action_name, type=sc_types.NODE_CONST_CLASS))[0]
-#         main_node = get_node(client)
-#         user = get_user_by_login(username)
-        
-#         template = ScTemplate()
-#         template.triple_with_relation(
-#             main_node >> "_main_node",
-#             sc_types.EDGE_ACCESS_VAR_POS_PERM,
-#             question_addr,
-#             sc_types.EDGE_ACCESS_VAR_POS_PERM,
-#             rrel_1
-#         )
-#         template.triple_with_relation(
-#             main_node >> "_main_node",
-#             sc_types.EDGE_ACCESS_VAR_POS_PERM,
-#             user,
-#             sc_types.EDGE_ACCESS_VAR_POS_PERM,
-#             rrel_2
-#         )
-#         template.triple(action_agent, sc_types.EDGE_ACCESS_VAR_POS_PERM, "_main_node")
-#         template.triple(initiated_node, sc_types.EDGE_ACCESS_VAR_POS_PERM, "_main_node")
-        
-#         event_params = ScEventSubscriptionParams(main_node, ScEventType.AFTER_GENERATE_INCOMING_ARC, call_back)
-#         client.events_create(event_params)
-#         client.template_generate(template)
-        
-#         global payload
-#         if callback_event.wait(timeout=10):
-#             while not payload:
-#                 continue
-#             return payload
-#         else:
-#             raise AgentError(524, "Timeout")
-#     else:
-#         raise ScServerError
-
-
-# def call_delete_old_nodes_agent(self, action_name: str, username: str) -> dict:
-#     """Вызов DeleteOldNodesAgent"""
-#     if is_connected():
-#         rrel_1 = client.resolve_keynodes(ScIdtfResolveParams(idtf='rrel_1', type=sc_types.NODE_CONST_ROLE))[0]
-#         initiated_node = client.resolve_keynodes(ScIdtfResolveParams(idtf='action_initiated', type=sc_types.NODE_CONST_CLASS))[0]
-#         action_agent = client.resolve_keynodes(ScIdtfResolveParams(idtf=action_name, type=sc_types.NODE_CONST_CLASS))[0]
-#         main_node = get_node(client)
-#         user = get_user_by_login(username)
-        
-#         template = ScTemplate()
-#         template.triple_with_relation(
-#             main_node >> "_main_node",
-#             sc_types.EDGE_ACCESS_VAR_POS_PERM,
-#             user,
-#             sc_types.EDGE_ACCESS_VAR_POS_PERM,
-#             rrel_1
-#         )
-#         template.triple(action_agent, sc_types.EDGE_ACCESS_VAR_POS_PERM, "_main_node")
-#         template.triple(initiated_node, sc_types.EDGE_ACCESS_VAR_POS_PERM, "_main_node")
-        
-#         event_params = ScEventSubscriptionParams(main_node, ScEventType.AFTER_GENERATE_INCOMING_ARC, call_back)
-#         client.events_create(event_params)
-#         client.template_generate(template)
-        
-#         global payload
-#         if callback_event.wait(timeout=10):
-#             while not payload:
-#                 continue
-#             return payload
-#         else:
-#             raise AgentError(524, "Timeout")
-#     else:
-#         raise ScServerError
-
-
-# def call_rating_update_agent(self, action_name: str, username: str) -> dict:
-#     """Вызов RatingUpdateAgent"""
-#     if is_connected():
-#         rrel_1 = client.resolve_keynodes(ScIdtfResolveParams(idtf='rrel_1', type=sc_types.NODE_CONST_ROLE))[0]
-#         initiated_node = client.resolve_keynodes(ScIdtfResolveParams(idtf='action_initiated', type=sc_types.NODE_CONST_CLASS))[0]
-#         action_agent = client.resolve_keynodes(ScIdtfResolveParams(idtf=action_name, type=sc_types.NODE_CONST_CLASS))[0]
-#         main_node = get_node(client)
-#         user = get_user_by_login(username)
-        
-#         template = ScTemplate()
-#         template.triple_with_relation(
-#             main_node >> "_main_node",
-#             sc_types.EDGE_ACCESS_VAR_POS_PERM,
-#             user,
-#             sc_types.EDGE_ACCESS_VAR_POS_PERM,
-#             rrel_1
-#         )
-#         template.triple(action_agent, sc_types.EDGE_ACCESS_VAR_POS_PERM, "_main_node")
-#         template.triple(initiated_node, sc_types.EDGE_ACCESS_VAR_POS_PERM, "_main_node")
-        
-#         event_params = ScEventSubscriptionParams(main_node, ScEventType.AFTER_GENERATE_INCOMING_ARC, call_back)
-#         client.events_create(event_params)
-#         client.template_generate(template)
-        
-#         global payload
-#         if callback_event.wait(timeout=10):
-#             while not payload:
-#                 continue
-#             return payload
-#         else:
-#             raise AgentError(524, "Timeout")
-#     else:
-#         raise ScServerError
 
 
 class OstisAuthAgent(AuthAgent):

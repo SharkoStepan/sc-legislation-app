@@ -194,3 +194,17 @@ button:hover {
     color: #667eea;
     font-size: 24px;
 }
+
+.submit-btn {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    padding: 15px 40px;
+    font-size: 18px;
+    border-radius: 25px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+    margin-top: 30px;  /* Добавьте эту строку */
+    margin-bottom: 20px;
+}
