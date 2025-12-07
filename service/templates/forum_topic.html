@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ topic.title }} - Форум</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/forum.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <a href="{{ url_for('main.index') }}">
+                <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Логотип" class="header-logo">
+            </a>
+            <nav>
+                <a href="{{ url_for('main.requests') }}"><button class="nav-button">Запросы</button></a>
+                <a href="{{ url_for('main.directory') }}"><button class="nav-button">Справочник</button></a>
+                <a href="{{ url_for('main.show_calendar') }}"><button class="nav-button">Календарь</button></a>
+                <a href="{{ url_for('main.forum') }}"><button class="nav-button active">Форум</button></a>
+            </nav>
+            <a href="{{ url_for('main.logout') }}">
+                <img src="{{ url_for('static', filename='images/user.png') }}" alt="Пользователь" class="user-icon">
+            </a>
+        </header>
+
+        <main>
+            <a href="{{ url_for('main.forum') }}" class="back-link">← Назад к форуму</a>
+
+            <div class="topic-detail">
+                <h1>{{ topic.title }}</h1>
+                <p class="topic-meta">Автор: <strong>{{ topic.author }}</strong></p>
+                <div class="topic-description">
+                    {{ topic.description }}
+                </div>
+            </div>
+
+            <div class="messages-section">
+                <h2>Сообщения ({{ messages|length }})</h2>
+
+                <div class="messages-list">
+                    {% if messages %}
+                        {% for message in messages %}
+                            <div class="message-card">
+                                <div class="message-author">{{ message.author }}</div>
+                                <div class="message-text">{{ message.text }}</div>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="empty-messages">Сообщений пока нет. Будьте первым!</p>
+                    {% endif %}
+                </div>
+
+                <div class="reply-form">
+                    <h3>Добавить сообщение</h3>
+
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                            {% for category, message in messages %}
+                                <div class="alert alert-{{ category }}">
+                                    {{ message }}
+                                </div>
+                            {% endfor %}
+                        {% endif %}
+                    {% endwith %}
+
+                    <form method="POST" action="{{ url_for('main.forum_reply', topic_id=topic.id) }}">
+                        <textarea name="message" class="form-control" rows="4" placeholder="Ваше сообщение..." required></textarea>
+                        <button type="submit" class="btn-primary">Отправить</button>
+                    </form>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>Персональный ассистент по юриспруденции</p>
+            <p>Ostis 2025</p>
+        </footer>
+    </div>
+</body>
+</html>

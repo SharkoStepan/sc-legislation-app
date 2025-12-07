@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Подтверждение Email - Юридическая база</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/verification.css') }}?v={{ range(1, 9999) | random }}">
+</head>
+<body>
+    <div class="header">
+        <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Логотип" class="logo-header">
+        <div class="header-links">
+            <a href="{{ url_for('main.auth') }}" class="header-link">Вход</a>
+            <a href="{{ url_for('main.reg') }}" class="header-link">Регистрация</a>
+        </div>
+    </div>
+
+    <div class="verification-container">
+        <div class="verification-box">
+            <div class="logo-container">
+                <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Логотип" class="logo">
+            </div>
+            
+            <h1>Подтверждение Email</h1>
+            
+            <p class="info-text">
+                Код подтверждения отправлен на:<br>
+                <strong>{{ email }}</strong>
+            </p>
+            
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+            
+            <form method="POST" action="{{ url_for('main.verification') }}">
+                {{ form.hidden_tag() }}
+                
+                <div style="display: none;">
+                    {{ form.email }}
+                </div>
+                
+                <div class="form-group">
+                    <label for="token">{{ form.token.label.text }}</label>
+                    {{ form.token(class="code-input", placeholder="000000", maxlength="6", autocomplete="off", autofocus=true, id="token") }}
+                </div>
+                
+                {{ form.submit(class="btn-primary") }}
+            </form>
+            
+            <div class="links">
+                <a href="{{ url_for('main.resend_code') }}" class="resend-link">
+                    Не получили код? Отправить повторно
+                </a>
+                <a href="{{ url_for('main.auth') }}" class="back-link">
+                    ← Вернуться к входу
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>&copy; 2025 OSTIS. Все права защищены.</p>
+    </div>
+</body>
+</html>

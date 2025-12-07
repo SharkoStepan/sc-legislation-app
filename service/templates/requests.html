@@ -2,67 +2,67 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Запросы | Юридический справочник</title>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
-    <link rel="stylesheet" href="static/styles/requests.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Запросы - Юридический ассистент</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/requests.css') }}">
 </head>
 <body>
     <div class="container">
         <header>
-            <img src="static/images/logo.png" alt="Логотип" class="header-logo">
+            <a href="{{ url_for('main.directory') }}">
+                <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Логотип" class="header-logo">
+            </a>
             <nav>
                 <a href="{{ url_for('main.requests') }}"><button class="nav-button active">Запросы</button></a>
                 <a href="{{ url_for('main.directory') }}"><button class="nav-button">Справочник</button></a>
                 <a href="{{ url_for('main.show_calendar') }}"><button class="nav-button">Календарь</button></a>
-                <a href="{{ url_for('main.templates') }}"><button class="nav-button">Шаблоны</button></a>
-                <a href="{{ url_for('main.logout') }}">
-                    <img src="static/images/logout.png" alt="Выйти" class="user-icon">
-                </a>
+                <a href="{{ url_for('main.forum') }}"><button class="nav-button">Форум</button></a>
             </nav>
+            <a href="{{ url_for('main.logout') }}">
+                <img src="{{ url_for('static', filename='images/logout.png') }}" alt="Выйти" class="user-icon">
+            </a>
         </header>
-    
-        <div id="loading-overlay" style="display: none;">
-            <div class="spinner"></div>
-        </div>
-        <div class="header-title">
-            <h1 class="main-heading">Запросы</h1>
-            <form class="search-bar" action="{{ url_for('main.requests') }}" method="POST">
-                <input type="text" placeholder="Что такое арендное жилье?" class="search-input" id="searchQuery" name="request_entry">
-                <div class="search-icon" id="searchButton">
-                    <button class="search-button" type="submit">
-                        <img src="static/images/search.png" alt="Поиск">
-                    </button>
-                </div>
-            </form>
+
+        <main>
+            <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Логотип" class="main-logo">
+            <h1>Запросы</h1>
+
             {% with messages = get_flashed_messages(with_categories=true, category_filter=['empty-text-error']) %}
-              {% if messages %}
-                {% for category, message in messages %}
-                    <div class="error-message">{{ message }}</div>
-                {% endfor %}
-              {% endif %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-error">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                {% endif %}
             {% endwith %}
 
             {% with messages = get_flashed_messages(with_categories=true, category_filter=['empty-result-error']) %}
-              {% if messages %}
-                {% for category, message in messages %}
-                    <div class="error-message">{{ message }}</div>
-                {% endfor %}
-              {% endif %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-error">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                {% endif %}
             {% endwith %}
-        </div>
-        <script>
-            window.addEventListener('beforeunload', function() {
-                document.getElementById('loading-overlay').style.display = 'flex';
-            });
-        
-            window.addEventListener('load', function() {
-                document.getElementById('loading-overlay').style.display = 'none';
-            });
-        </script>
+
+            <form action="{{ url_for('main.requests') }}" method="post" class="search-form">
+                <div class="input-wrapper">
+                    <input type="text" name="request_entry" placeholder="Что такое арендное жилье?" class="search-input">
+                    <button type="submit" class="search-button">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                            <path d="M21 21L15 15M17 10C17 13.866 13.866 17 10 17C6.13401 17 3 13.866 3 10C3 6.13401 6.13401 3 10 3C13.866 3 17 6.13401 17 10Z" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </button>
+                </div>
+            </form>
+        </main>
+
         <footer>
             <p>Персональный ассистент по юриспруденции</p>
             <p>Ostis 2025</p>
         </footer>
     </div>
-    </body>
-    </html>
+</body>
+</html>

@@ -7,187 +7,252 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='styles/test.css') }}">
 </head>
 <body>
-    <div class="container">
-        <div class="test-card">
-            <div class="test-header">
-                <h1>Тестирование</h1>
-                <div class="progress-info">
-                    <span>Вопрос: <span id="currentQuestion">1</span></span>
-                    <span>Правильных ответов: <span id="correctAnswers">0</span></span>
+    <header class="header">
+        <div class="header__logo">
+            <img src="{{ url_for('static', filename='images/logo.png') }}" alt="OSTIS Logo">
+        </div>
+        <nav class="header__nav">
+            <a href="{{ url_for('main.requests') }}" class="header__link">Запросы</a>
+            <a href="{{ url_for('main.directory') }}" class="header__link">Справочник</a>
+            <a href="{{ url_for('main.show_calendar') }}" class="header__link">Календарь</a>
+            <a href="{{ url_for('main.forum') }}" class="header__link">Форум</a>
+        </nav>
+        <div class="header__user">
+            <img src="{{ url_for('static', filename='images/user.png') }}" alt="User Icon">
+        </div>
+    </header>
+
+    <main class="main">
+        <div class="container">
+            <!-- Стартовый экран -->
+            <div id="start-screen" class="screen">
+                <div class="logo-container">
+                    <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Logo" class="main-logo">
+                </div>
+                <h1 class="main-title">Тестирование</h1>
+                <p class="subtitle">Пройдите тест для подтверждения квалификации</p>
+                <button class="btn btn--primary" onclick="startTest()">Начать тестирование</button>
+            </div>
+
+            <!-- Экран вопроса -->
+            <div id="question-screen" class="screen" style="display: none;">
+                <div class="question-container">
+                    <h2 class="question-text" id="question-text"></h2>
+                    <div class="answers-list" id="answers-container"></div>
+                    <div class="feedback" id="feedback"></div>
+                    <button class="btn btn--success" id="btn-submit" style="display: none;" onclick="submitSelectedAnswer()">Отправить ответ</button>
                 </div>
             </div>
 
-            <div class="test-content">
-                <div id="questionSection" class="question-section">
-                    <h2 id="questionText">Загрузка вопроса...</h2>
-                    <div id="answersContainer" class="answers-container">
-                        <!-- Варианты ответов будут здесь -->
-                    </div>
-                    <button id="submitBtn" class="submit-btn" style="display: none;">Ответить</button>
+            <!-- Экран результата -->
+            <div id="result-screen" class="screen" style="display: none;">
+                <div class="result-container">
+                    <h2 class="result-title">Тест завершён!</h2>
+                    <p class="result-text">Ваш результат: <span class="result-score" id="final-score">0</span> баллов</p>
+                    <button class="btn btn--primary" onclick="goToMain()">На главную</button>
                 </div>
+            </div>
 
-                <div id="resultSection" class="result-section" style="display: none;">
-                    <h2>Тест завершён!</h2>
-                    <div class="final-score">
-                        <p>Ваш результат:</p>
-                        <div class="score-display">
-                            <span id="finalScore">0</span>
-                        </div>
-                    </div>
-                    <button onclick="restartTest()" class="submit-btn">Пройти снова</button>
-                </div>
+            <!-- Индикатор загрузки -->
+            <div id="loading" class="loading" style="display: none;">
+                <div class="loading__spinner"></div>
+                <p>Загрузка...</p>
             </div>
         </div>
-    </div>
+    </main>
+
+    <footer class="footer">
+        <p>Персональный ассистент по юриспруденции</p>
+        <p>Ostis 2025</p>
+    </footer>
 
     <script>
         let currentQuestionId = null;
         let selectedAnswerId = null;
-        let correctCount = 0;
-        let questionCount = 0;
 
         async function startTest() {
+            showLoading();
             try {
                 const response = await fetch('/api/test/start', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
+                    headers: { 'Content-Type': 'application/json' }
                 });
                 const data = await response.json();
                 
-                if (response.ok && data.success) {
-                    console.log('Тест начат');
-                    loadNextQuestion();
+                if (data.success) {
+                    document.getElementById('start-screen').style.display = 'none';
+                    hideLoading();
+                    loadQuestion();
                 } else {
-                    console.error('Ошибка начала теста:', data.message);
-                    alert('Ошибка начала теста: ' + data.message);
+                    hideLoading();
+                    alert('Ошибка запуска теста: ' + data.message);
                 }
             } catch (error) {
-                console.error('Ошибка начала теста:', error);
-                alert('Ошибка начала теста: ' + error);
+                hideLoading();
+                console.error('Ошибка при запуске теста:', error);
+                alert('Ошибка при запуске теста');
             }
         }
 
-        async function loadNextQuestion() {
+        async function loadQuestion() {
+            showLoading();
+            clearFeedback();
+            selectedAnswerId = null;
+            document.getElementById('btn-submit').style.display = 'none';
+            
             try {
-                // Получаем вопрос
-                const questionResponse = await fetch('/api/test/question');
-                const questionData = await questionResponse.json();
+                const response = await fetch('/api/test/question');
+                const data = await response.json();
                 
-                if (questionResponse.ok && questionData.success) {
-                    questionCount++;
-                    currentQuestionId = questionData.question.id;
-                    
-                    document.getElementById('currentQuestion').textContent = questionCount;
-                    document.getElementById('questionText').textContent = questionData.question.text;
-                    
-                    // Получаем варианты ответов
-                    const answersResponse = await fetch(`/api/test/answers/${questionData.question.addr}`);
-                    const answersData = await answersResponse.json();
-                    
-                    if (answersResponse.ok && answersData.success) {
-                        const container = document.getElementById('answersContainer');
-                        container.innerHTML = '';
-                        
-                        answersData.answers.forEach((answer, index) => {
-                            const div = document.createElement('div');
-                            div.className = 'answer-option';
-                            div.innerHTML = `
-                                <input type="radio" id="answer${index}" name="answer" value="${answer.id}">
-                                <label for="answer${index}">${answer.text}</label>
-                            `;
-                            div.querySelector('input').addEventListener('change', (e) => {
-                                selectedAnswerId = e.target.value;
-                                document.getElementById('submitBtn').style.display = 'block';
-                            });
-                            container.appendChild(div);
-                        });
-                    } else {
-                        console.log('Нет вариантов ответов');
-                        finishTest();
-                    }
+                if (data.success && data.question) {
+                    currentQuestionId = data.question.id;
+                    displayQuestion(data.question);
+                    await loadAnswers(data.question.id);
+                    hideLoading();
                 } else {
-                    console.log('Вопросы закончились, финиш');
+                    hideLoading();
                     finishTest();
                 }
             } catch (error) {
+                hideLoading();
                 console.error('Ошибка загрузки вопроса:', error);
-                finishTest();
+                alert('Ошибка загрузки вопроса');
             }
         }
 
-        async function submitAnswer() {
-            if (!selectedAnswerId) return;
+        function displayQuestion(question) {
+            document.getElementById('question-screen').style.display = 'block';
+            document.getElementById('question-text').textContent = question.text;
+            document.getElementById('answers-container').innerHTML = '';
+        }
 
+        async function loadAnswers(questionId) {
             try {
+                const response = await fetch('/api/test/answers/' + questionId);
+                const data = await response.json();
+                
+                if (data.success && data.answers) {
+                    displayAnswers(data.answers);
+                } else {
+                    alert('Ошибка загрузки ответов');
+                }
+            } catch (error) {
+                console.error('Ошибка загрузки ответов:', error);
+                alert('Ошибка загрузки ответов');
+            }
+        }
+
+        function displayAnswers(answers) {
+            const container = document.getElementById('answers-container');
+            container.innerHTML = '';
+            
+            answers.forEach(function(answer) {
+                const answerDiv = document.createElement('div');
+                answerDiv.className = 'answer-item';
+                answerDiv.dataset.answerId = answer.id;
+                answerDiv.textContent = answer.text;
+                answerDiv.onclick = function() { selectAnswer(answer.id); };
+                container.appendChild(answerDiv);
+            });
+        }
+
+        function selectAnswer(answerId) {
+            document.querySelectorAll('.answer-item').forEach(el => el.classList.remove('answer-item--selected'));
+            const selected = document.querySelector(`.answer-item[data-answer-id="${answerId}"]`);
+            if (selected) selected.classList.add('answer-item--selected');
+            
+            selectedAnswerId = answerId;
+            document.getElementById('btn-submit').style.display = 'inline-block';
+        }
+
+        async function submitSelectedAnswer() {
+            if (!selectedAnswerId || !currentQuestionId) {
+                alert('Пожалуйста, выберите ответ');
+                return;
+            }
+            
+            const submitBtn = document.getElementById('btn-submit');
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Отправка...';
+            showLoading();
+            
+            try {
+                const startTime = Date.now();
                 const response = await fetch('/api/test/answer', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         question_id: currentQuestionId,
                         answer_id: selectedAnswerId
                     })
                 });
-                const data = await response.json();
                 
-                if (response.ok && data.success) {
-                    if (data.is_correct) {
-                        correctCount++;
-                        document.getElementById('correctAnswers').textContent = correctCount;
-                    }
-                    
-                    selectedAnswerId = null;
-                    document.getElementById('submitBtn').style.display = 'none';
-                    setTimeout(loadNextQuestion, 500);
+                const data = await response.json();
+                console.log(`[TIMING] Answer submission took ${Date.now() - startTime}ms`);
+                
+                hideLoading();
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Отправить ответ';
+                
+                if (data.success) {
+                    showFeedback(data.is_correct);
+                    setTimeout(() => loadQuestion(), 1500);
                 } else {
-                    console.error('Ошибка отправки ответа:', data.message);
                     alert('Ошибка отправки ответа: ' + data.message);
                 }
             } catch (error) {
+                hideLoading();
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Отправить ответ';
                 console.error('Ошибка отправки ответа:', error);
-                alert('Ошибка отправки ответа: ' + error);
+                alert('Ошибка отправки ответа');
             }
+        }
+
+        function showFeedback(isCorrect) {
+            const feedback = document.getElementById('feedback');
+            feedback.textContent = isCorrect ? '✓ Правильно!' : '✗ Неправильно';
+            feedback.className = 'feedback ' + (isCorrect ? 'feedback--correct' : 'feedback--incorrect');
+            feedback.style.display = 'block';
+        }
+
+        function clearFeedback() {
+            document.getElementById('feedback').style.display = 'none';
         }
 
         async function finishTest() {
+            document.getElementById('question-screen').style.display = 'none';
+            showLoading();
+            
             try {
-                const response = await fetch('/api/test/finish', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
-                });
+                const response = await fetch('/api/test/finish', { method: 'POST' });
                 const data = await response.json();
+                hideLoading();
                 
-                document.getElementById('questionSection').style.display = 'none';
-                document.getElementById('resultSection').style.display = 'block';
-                
-                const finalScore = (data.success && data.rating) ? data.rating : correctCount;
-                document.getElementById('finalScore').textContent = finalScore;
+                if (data.success) {
+                    document.getElementById('final-score').textContent = data.rating || 0;
+                    document.getElementById('result-screen').style.display = 'block';
+                } else {
+                    alert('Ошибка завершения теста');
+                }
             } catch (error) {
+                hideLoading();
                 console.error('Ошибка завершения теста:', error);
-                document.getElementById('questionSection').style.display = 'none';
-                document.getElementById('resultSection').style.display = 'block';
-                document.getElementById('finalScore').textContent = correctCount;
+                alert('Ошибка завершения теста');
             }
         }
 
-        function restartTest() {
-            correctCount = 0;
-            questionCount = 0;
-            document.getElementById('correctAnswers').textContent = 0;
-            document.getElementById('resultSection').style.display = 'none';
-            document.getElementById('questionSection').style.display = 'block';
-            startTest();
+        function goToMain() {
+            window.location.href = "{{ url_for('main.directory') }}";
         }
 
-        document.getElementById('submitBtn').addEventListener('click', submitAnswer);
+        function showLoading() {
+            document.getElementById('loading').style.display = 'flex';
+        }
 
-        // Автоматический старт при загрузке страницы
-        window.onload = startTest;
+        function hideLoading() {
+            document.getElementById('loading').style.display = 'none';
+        }
     </script>
 </body>
 </html>

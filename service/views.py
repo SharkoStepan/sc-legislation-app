@@ -31,6 +31,9 @@ from .services import (
     test_agent_update_rating
 )
 
+from .services import verification_send_token, verification_check_token
+from .forms import VerificationForm
+
 main = Blueprint("main", __name__)
 
 @main.route("/index")
@@ -53,22 +56,36 @@ def about():
     print(users)
     return f"<pre>{str(current_user)}</pre>"
 
-@main.route("/auth", methods=['GET','POST'])
+@main.route('/auth', methods=['GET', 'POST'])
 def auth():
-    """
-    Метод для реализации эндпоинта аутентификации
-    :return: Разметка страницы
-    """
+    """Аутентификация (вход)"""
     if current_user.is_authenticated:
         return redirect(url_for('main.directory'))
+    
     form = LoginForm()
+    
     if form.validate_on_submit():
-        user = find_user_by_username(form.username.data)
-        auth_response = auth_agent(form.username.data, form.password.data)
-        if auth_response["status"] == "Valid":
-            login_user(user)
-            return redirect(url_for('main.directory'))
+        email = form.email.data
+        password = form.password.data
+        
+        # Вызов агента аутентификации
+        auth_response = auth_agent(email, password)
+        
+        if auth_response['status'] == 'Valid':
+            # Ищем пользователя
+            user = find_user_by_username(email)
+            
+            if user:
+                login_user(user)
+                flash('Вход выполнен успешно!', 'success')
+                return redirect(url_for('main.directory'))
+            else:
+                flash('Пользователь не найден. Возможно, email не подтвержден.', 'error')
+        else:
+            flash('Неверный email или пароль', 'error')
+    
     return render_template('authorization.html', form=form)
+
 
 @main.route("/reg", methods=['GET', 'POST'])
 def reg():
@@ -82,21 +99,111 @@ def reg():
     form = RegistrationForm()
     
     if form.validate_on_submit():
+        # Проверяем, что для специалиста все поля заполнены
+        if form.user_type.data == 'specialist':
+            if not all([form.full_name.data, form.gender.data, 
+                       form.age.data, form.experience.data, form.field.data]):
+                flash('Для специалиста необходимо заполнить все дополнительные поля', 'error')
+                return render_template('registration.html', form=form)
+        
+        # Вызываем агент регистрации
         reg_response = reg_agent(
-            gender=form.gender.data,
-            surname=form.surname.data,
-            name=form.name.data,
-            fname=form.patronymic.data,
-            reg_place=form.reg_place.data,
-            birthdate=form.birthdate.data,
-            username=form.username.data,
-            password=form.password.data
+            email=form.email.data,
+            password=form.password.data,
+            password_conf=form.password_conf.data,
+            user_type=form.user_type.data,
+            full_name=form.full_name.data if form.user_type.data == 'specialist' else None,
+            gender=form.gender.data if form.user_type.data == 'specialist' else None,
+            age=str(form.age.data) if form.user_type.data == 'specialist' and form.age.data else None,
+            experience=str(form.experience.data) if form.user_type.data == 'specialist' and form.experience.data else None,
+            field=form.field.data if form.user_type.data == 'specialist' else None
         )
+        
         if reg_response["status"] == "Valid":
-            user = find_user_by_username(form.username.data)
-            login_user(user)
-            return redirect(url_for('main.directory'))
+            # Сохраняем email И ТИП ПОЛЬЗОВАТЕЛЯ в сессии для верификации
+            session['verification_email'] = form.email.data
+            session['user_type'] = form.user_type.data  # ← ДОБАВИЛИ ЭТУ СТРОКУ
+            flash('Регистрация успешна! Код подтверждения отправлен на ваш email', 'success')
+            return redirect(url_for('main.verification'))
+        else:
+            flash(f'Ошибка регистрации: {reg_response.get("message", "Неизвестная ошибка")}', 'error')
+    
     return render_template('registration.html', form=form)
+
+@main.route('/verification', methods=['GET', 'POST'])
+def verification():
+    """Верификация email с кодом из письма"""
+    form = VerificationForm()
+    
+    # Получаем email из сессии
+    email = session.get('verification_email')
+    
+    if not email:
+        flash('Сессия истекла. Пожалуйста, войдите заново.', 'error')
+        return redirect(url_for('main.auth'))
+    
+    # Подставляем email в форму для скрытого поля
+    form.email.data = email
+    
+    if form.validate_on_submit():
+        token = form.token.data
+        
+        try:
+            # Проверяем токен через агент верификации
+            result = verification_check_token(email, token)
+            
+            # Получаем статус (может быть строкой или enum)
+            status = str(result.get('status', '')).lower()
+            
+            # Проверяем успешную верификацию
+            if 'verified' in status or 'valid' in status or 'success' in status:
+                flash('Email успешно подтвержден!', 'success')
+                
+                # Получаем тип пользователя из сессии
+                user_type = session.get('user_type', 'user')
+                
+                # АВТОМАТИЧЕСКИЙ ВХОД ПОСЛЕ ВЕРИФИКАЦИИ
+                user = find_user_by_username(email)
+                if user:
+                    login_user(user)
+                
+                # Очищаем данные регистрации из сессии
+                session.pop('verification_email', None)
+                session.pop('user_type', None)
+                
+                # РЕДИРЕКТ В ЗАВИСИМОСТИ ОТ ТИПА
+                if user_type == 'specialist':
+                    flash('Пожалуйста, пройдите тест для подтверждения квалификации.', 'info')
+                    return redirect(url_for('main.test_page'))
+                else:
+                    return redirect(url_for('main.directory'))  # или куда нужно
+            else:
+                flash(f'Неверный код подтверждения.', 'error')
+                
+        except Exception as e:
+            flash(f'Ошибка при проверке кода: {str(e)}', 'error')
+    
+    return render_template('verification.html', form=form, email=email)
+
+@main.route('/resend_code', methods=['GET'])
+def resend_code():
+    """Повторная отправка кода"""
+    email = session.get('verification_email')
+    
+    if not email:
+        flash('Сессия истекла. Пожалуйста, зарегистрируйтесь снова.', 'error')
+        return redirect(url_for('main.reg'))
+    
+    # Повторная отправка кода
+    send_response = verification_send_token(email)
+    
+    if send_response['status'] == 'TokenSent':
+        flash(f'Новый код отправлен на {email}', 'success')
+    else:
+        flash('Ошибка отправки кода. Попробуйте позже.', 'error')
+    
+    return redirect(url_for('main.verification'))
+
 
 @main.route("/logout")
 def logout():
@@ -480,4 +587,31 @@ def test_get_answers(question_id):
         import traceback
         traceback.print_exc()
         return {"success": False, "message": str(e)}, 500
+    
+@main.route('/forum')
+@login_required
+def forum():
+    """Форум (в разработке)"""
+    flash('Форум в разработке. Скоро будет доступен!', 'warning')
+    return redirect(url_for('main.directory'))
 
+@main.route('/forum/create')
+@login_required
+def forum_create_topic():
+    """Создание темы (в разработке)"""
+    flash('Форум в разработке. Скоро будет доступен!', 'warning')
+    return redirect(url_for('main.directory'))
+
+@main.route('/forum/topic/<int:topic_id>')
+@login_required
+def forum_topic(topic_id):
+    """Просмотр темы (в разработке)"""
+    flash('Форум в разработке. Скоро будет доступен!', 'warning')
+    return redirect(url_for('main.directory'))
+
+@main.route('/forum/reply/<int:topic_id>', methods=['POST'])
+@login_required
+def forum_reply(topic_id):
+    """Ответ на тему (в разработке)"""
+    flash('Форум в разработке. Скоро будет доступен!', 'warning')
+    return redirect(url_for('main.directory'))

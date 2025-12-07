@@ -2,6 +2,7 @@ from enum import Enum
 from threading import Event
 
 import sc_client.client as client
+
 from ..exceptions import ScServerError
 from sc_client.client import is_connected, search_links_by_contents
 from sc_client.models import (
@@ -39,6 +40,8 @@ from service.utils.ostis_utils import(
 )
 from config import Config
 from service.agents.abstract.test_agent import TestAgent, TestStatus
+from service.agents.abstract.verification_agent import VerificationAgent, VerificationStatus
+
 
 payload = None
 callback_event = Event()
@@ -384,225 +387,335 @@ class Ostis:
     def __init__(self, url):
         self.ostis_url = url
 
-    def call_auth_agent(self, action_name: str, username, password) -> str:
-        """
-        Метод для вызова агента аутентификации
-        :param action_name: Идентификатор action-ноды агента
-        :param username: Логин пользователя для аутентификации
-        :param password: Пароль пользователя для аутентификации
-        :return: Ответ сервера
-        :raises AgentError: Возникает при истечении времени ожидания
-        :raises ScServerError: Возникает при отсутствии запущенного sc-сервера
-        """
-        if is_connected():
-            username_lnk = create_link(client, username)
-            password_lnk = create_link(client, password)
-            rrel_1 = client.resolve_keynodes(ScIdtfResolveParams(idtf='rrel_1', type=sc_types.NODE_CONST_ROLE))[0]
-            rrel_2 = client.resolve_keynodes(ScIdtfResolveParams(idtf='rrel_2', type=sc_types.NODE_CONST_ROLE))[0]
-            initiated_node = client.resolve_keynodes(ScIdtfResolveParams(idtf='action_initiated', type=sc_types.NODE_CONST_CLASS))[0]
-            action_agent = client.resolve_keynodes(ScIdtfResolveParams(idtf=action_name, type=sc_types.NODE_CONST_CLASS))[0]
-            main_node = get_node(client)
-
-            template = ScTemplate()
-            template.triple_with_relation(
-                main_node >> "_main_node",
-                sc_types.EDGE_ACCESS_VAR_POS_PERM,
-                username_lnk,
-                sc_types.EDGE_ACCESS_VAR_POS_PERM,
-                rrel_1
-            )
-            template.triple_with_relation(
-                main_node >> "_main_node",
-                sc_types.EDGE_ACCESS_VAR_POS_PERM,
-                password_lnk,
-                sc_types.EDGE_ACCESS_VAR_POS_PERM,
-                rrel_2
-            )
-            template.triple(
-                action_agent,
-                sc_types.EDGE_ACCESS_VAR_POS_PERM,
-                "_main_node",
-            )
-            template.triple(
-                initiated_node,
-                sc_types.EDGE_ACCESS_VAR_POS_PERM,
-                "_main_node",
-            )
-
-            event_params = ScEventSubscriptionParams(main_node, ScEventType.AFTER_GENERATE_INCOMING_ARC, call_back)
-            client.events_create(event_params)
-            client.template_generate(template)
-
-            global payload
-            if callback_event.wait(timeout=10):
-                while not payload:
-                    continue
-                return payload
-            else:
-                raise AgentError(524, "Timeout")
-        else:
-            raise ScServerError
-    
-    def call_reg_agent(
-            self, 
-            action_name: str,
-            gender: str, 
-            surname: str,
-            name: str,
-            fname: str,
-            birthdate,
-            reg_place: str,
-            username: str,
-            password: str
-        ):
+    def call_registration_agent(
+        self,
+        action_name: str,
+        email: str,
+        password: str,
+        password_conf: str,
+        user_type: str,
+        full_name: str = None,
+        gender: str = None,
+        age: str = None,
+        experience: str = None,
+        field: str = None
+    ):
         """
         Метод для вызова агента регистрации
-        :param action_name: Идентификатор action-ноды агента
-        :param gender: Пол пользователя для регистрации
-        :param surname: Фамилия пользователя для регистрации
-        :param name: Имя пользователя для регистрации
-        :param fname: Отчество пользователя для регистрации
-        :param birthdate: Дата рождения пользователя для регистрации
-        :param reg_place: Место регистрации пользователя для регистрации
-        :param username: Логин пользователя для регистрации
-        :param password: Пароль пользователя для регистрации
-        :return: Ответ сервера
-        :raises AgentError: Возникает при истечении времени ожидания
-        :raises ScServerError: Возникает при отсутствии запущенного sc-сервера
         """
-        if is_connected():
-            day, month, year = split_date_content(birthdate)
-            username_lnk = create_link(client, username)
-            password_lnk = create_link(client, password)
-            gender_node = set_gender_content(gender)
-            surname_lnk = create_link(client, surname)
-            name_lnk = create_link(client, name)
-            fname_lnk = create_link(client, fname)
-            day_node = set_system_idtf(day)
-            month_node = set_system_idtf(month)
-            year_node = set_system_idtf(year)
-            reg_place_lnk = create_link(client, reg_place)
-
-            rrel_1 = client.resolve_keynodes(ScIdtfResolveParams(idtf='rrel_1', type=sc_types.NODE_CONST_ROLE))[0]
-            rrel_2 = client.resolve_keynodes(ScIdtfResolveParams(idtf='rrel_2', type=sc_types.NODE_CONST_ROLE))[0]
-            rrel_3 = client.resolve_keynodes(ScIdtfResolveParams(idtf='rrel_3', type=sc_types.NODE_CONST_ROLE))[0]
-            rrel_4 = client.resolve_keynodes(ScIdtfResolveParams(idtf='rrel_4', type=sc_types.NODE_CONST_ROLE))[0]
+        if not is_connected():
+            raise ScServerError()
+        
+        global payload
+        payload = None
+        
+        # Создаем links для данных
+        email_lnk = create_link(client, email)
+        password_lnk = create_link(client, password)
+        password_conf_lnk = create_link(client, password_conf)
+        
+        # Резолвим keynodes
+        action_agent = client.resolve_keynodes(
+            ScIdtfResolveParams(idtf=action_name, type=sc_types.NODE_CONST_CLASS)
+        )[0]
+        
+        initiated_node = client.resolve_keynodes(
+            ScIdtfResolveParams(idtf='action_initiated', type=sc_types.NODE_CONST_CLASS)
+        )[0]
+        
+        # Резолвим rrel_
+        rrel_1 = client.resolve_keynodes(ScIdtfResolveParams(idtf='rrel_1', type=sc_types.NODE_CONST_ROLE))[0]
+        rrel_2 = client.resolve_keynodes(ScIdtfResolveParams(idtf='rrel_2', type=sc_types.NODE_CONST_ROLE))[0]
+        rrel_3 = client.resolve_keynodes(ScIdtfResolveParams(idtf='rrel_3', type=sc_types.NODE_CONST_ROLE))[0]
+        rrel_4 = client.resolve_keynodes(ScIdtfResolveParams(idtf='rrel_4', type=sc_types.NODE_CONST_ROLE))[0]
+        
+        # Резолвим типы пользователей
+        concept_client_kn = client.resolve_keynodes(
+            ScIdtfResolveParams(idtf='concept_client', type=sc_types.NODE_CONST_CLASS)
+        )[0]
+        concept_specialist_kn = client.resolve_keynodes(
+            ScIdtfResolveParams(idtf='concept_specialist', type=sc_types.NODE_CONST_CLASS)
+        )[0]
+        
+        # Выбираем класс типа пользователя
+        user_type_class = concept_client_kn if user_type == 'client' else concept_specialist_kn
+        
+        # Создаем главную ноду действия
+        main_node = get_node(client)
+        
+        # Создаем шаблон
+        template = ScTemplate()
+        
+        # rrel_1: email
+        template.triple_with_relation(
+            main_node >> "_main_node",
+            sc_types.EDGE_ACCESS_VAR_POS_PERM,
+            email_lnk,
+            sc_types.EDGE_ACCESS_VAR_POS_PERM,
+            rrel_1
+        )
+        
+        # rrel_2: password
+        template.triple_with_relation(
+            main_node >> "_main_node",
+            sc_types.EDGE_ACCESS_VAR_POS_PERM,
+            password_lnk,
+            sc_types.EDGE_ACCESS_VAR_POS_PERM,
+            rrel_2
+        )
+        
+        # rrel_3: password_conf
+        template.triple_with_relation(
+            main_node >> "_main_node",
+            sc_types.EDGE_ACCESS_VAR_POS_PERM,
+            password_conf_lnk,
+            sc_types.EDGE_ACCESS_VAR_POS_PERM,
+            rrel_3
+        )
+        
+        # rrel_4: user_type с правильной связью
+        template.triple_with_relation(
+            main_node >> "_main_node",
+            sc_types.EDGE_ACCESS_VAR_POS_PERM,
+            sc_types.NODE_VAR >> "_user_type",
+            sc_types.EDGE_ACCESS_VAR_POS_PERM,
+            rrel_4
+        )
+        
+        template.triple(
+            user_type_class,
+            sc_types.EDGE_ACCESS_VAR_POS_PERM,
+            "_user_type"
+        )
+        
+        # Если specialist - добавляем дополнительные поля
+        if user_type == 'specialist':
             rrel_5 = client.resolve_keynodes(ScIdtfResolveParams(idtf='rrel_5', type=sc_types.NODE_CONST_ROLE))[0]
             rrel_6 = client.resolve_keynodes(ScIdtfResolveParams(idtf='rrel_6', type=sc_types.NODE_CONST_ROLE))[0]
             rrel_7 = client.resolve_keynodes(ScIdtfResolveParams(idtf='rrel_7', type=sc_types.NODE_CONST_ROLE))[0]
             rrel_8 = client.resolve_keynodes(ScIdtfResolveParams(idtf='rrel_8', type=sc_types.NODE_CONST_ROLE))[0]
+            rrel_9 = client.resolve_keynodes(ScIdtfResolveParams(idtf='rrel_9', type=sc_types.NODE_CONST_ROLE))[0]
+            
+            if full_name:
+                full_name_lnk = create_link(client, full_name)
+                template.triple_with_relation(
+                    main_node >> "_main_node",
+                    sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                    full_name_lnk,
+                    sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                    rrel_5
+                )
+            
+            if gender:
+                gender_lnk = create_link(client, gender)
+                template.triple_with_relation(
+                    main_node >> "_main_node",
+                    sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                    gender_lnk,
+                    sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                    rrel_6
+                )
+            
+            if age:
+                age_lnk = create_link(client, str(age))
+                template.triple_with_relation(
+                    main_node >> "_main_node",
+                    sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                    age_lnk,
+                    sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                    rrel_7
+                )
+            
+            if experience:
+                experience_lnk = create_link(client, str(experience))
+                template.triple_with_relation(
+                    main_node >> "_main_node",
+                    sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                    experience_lnk,
+                    sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                    rrel_8
+                )
+            
+            if field:
+                field_lnk = create_link(client, field)
+                template.triple_with_relation(
+                    main_node >> "_main_node",
+                    sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                    field_lnk,
+                    sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                    rrel_9
+                )
+        
+        # Связываем с классом действия
+        template.triple(
+            action_agent,
+            sc_types.EDGE_ACCESS_VAR_POS_PERM,
+            "_main_node",
+        )
+        
+        # Инициируем действие
+        template.triple(
+            initiated_node,
+            sc_types.EDGE_ACCESS_VAR_POS_PERM,
+            "_main_node",
+        )
+        
+        # Подписываемся на событие
+        event_params = ScEventSubscriptionParams(
+            main_node,
+            ScEventType.AFTER_GENERATE_INCOMING_ARC,
+            call_back
+        )
+        client.events_create(event_params)
+        
+        # Генерируем структуру
+        client.template_generate(template)
+        
+        # Ждем результата
+        if callback_event.wait(timeout=30):
+            while not payload:
+                continue
+            return payload
+        else:
+            raise AgentError(524, "Timeout")
 
-            rrel_user_day = client.resolve_keynodes(ScIdtfResolveParams(idtf='rrel_user_day', type=sc_types.NODE_CONST_ROLE))[0]
-            rrel_user_month = client.resolve_keynodes(ScIdtfResolveParams(idtf='rrel_user_month', type=sc_types.NODE_CONST_ROLE))[0]
-            rrel_user_year = client.resolve_keynodes(ScIdtfResolveParams(idtf='rrel_user_year', type=sc_types.NODE_CONST_ROLE))[0]
 
-            initiated_node = client.resolve_keynodes(ScIdtfResolveParams(idtf='action_initiated', type=sc_types.NODE_CONST_CLASS))[0]
-            action_agent = client.resolve_keynodes(ScIdtfResolveParams(idtf=action_name, type=sc_types.NODE_CONST_CLASS))[0]
-            main_node = get_node(client)
 
-            template = ScTemplate()
+    def call_auth_agent(self, action_name: str, email: str, password: str):
+        """
+        Метод для вызова агента аутентификации
+        """
+        if not is_connected():
+            raise ScServerError()
+        
+        global payload
+        payload = None
+        
+        # Создаем links
+        username_lnk = create_link(client, email)
+        password_lnk = create_link(client, password)
+        
+        # Резолвим keynodes
+        rrel_1 = client.resolve_keynodes(ScIdtfResolveParams(idtf='rrel_1', type=sc_types.NODE_CONST_ROLE))[0]
+        rrel_2 = client.resolve_keynodes(ScIdtfResolveParams(idtf='rrel_2', type=sc_types.NODE_CONST_ROLE))[0]
+        initiated_node = client.resolve_keynodes(ScIdtfResolveParams(idtf='action_initiated', type=sc_types.NODE_CONST_CLASS))[0]
+        action_agent = client.resolve_keynodes(ScIdtfResolveParams(idtf=action_name, type=sc_types.NODE_CONST_CLASS))[0]
+        
+        main_node = get_node(client)
+        
+        # Создаем шаблон
+        template = ScTemplate()
+        template.triple_with_relation(
+            main_node >> "_main_node",
+            sc_types.EDGE_ACCESS_VAR_POS_PERM,
+            username_lnk,
+            sc_types.EDGE_ACCESS_VAR_POS_PERM,
+            rrel_1
+        )
+        template.triple_with_relation(
+            main_node >> "_main_node",
+            sc_types.EDGE_ACCESS_VAR_POS_PERM,
+            password_lnk,
+            sc_types.EDGE_ACCESS_VAR_POS_PERM,
+            rrel_2
+        )
+        template.triple(
+            action_agent,
+            sc_types.EDGE_ACCESS_VAR_POS_PERM,
+            "_main_node",
+        )
+        template.triple(
+            initiated_node,
+            sc_types.EDGE_ACCESS_VAR_POS_PERM,
+            "_main_node",
+        )
+        
+        event_params = ScEventSubscriptionParams(
+            main_node,
+            ScEventType.AFTER_GENERATE_INCOMING_ARC,  # <- ИСПРАВЛЕНИЕ
+            call_back
+        )
+        client.events_create(event_params)
+        client.template_generate(template)
+        
+        if callback_event.wait(timeout=10):
+            while not payload:
+                continue
+            return payload
+        else:
+            raise AgentError(524, "Timeout")
+
+
+    def call_verification_agent(self, action_name: str, email: str, token: str = None):
+        """
+        Метод для вызова агента верификации
+        """
+        if not is_connected():
+            raise ScServerError()
+        
+        global payload
+        payload = None
+        
+        # Создаем links
+        email_lnk = create_link(client, email)
+        
+        # Резолвим keynodes
+        rrel_1 = client.resolve_keynodes(ScIdtfResolveParams(idtf='rrel_1', type=sc_types.NODE_CONST_ROLE))[0]
+        initiated_node = client.resolve_keynodes(ScIdtfResolveParams(idtf='action_initiated', type=sc_types.NODE_CONST_CLASS))[0]
+        action_agent = client.resolve_keynodes(ScIdtfResolveParams(idtf=action_name, type=sc_types.NODE_CONST_CLASS))[0]
+        
+        main_node = get_node(client)
+        
+        # Создаем шаблон
+        template = ScTemplate()
+        template.triple_with_relation(
+            main_node >> "_main_node",
+            sc_types.EDGE_ACCESS_VAR_POS_PERM,
+            email_lnk,
+            sc_types.EDGE_ACCESS_VAR_POS_PERM,
+            rrel_1
+        )
+        
+        # Если передан token, добавляем как rrel_2
+        if token is not None:
+            rrel_2 = client.resolve_keynodes(ScIdtfResolveParams(idtf='rrel_2', type=sc_types.NODE_CONST_ROLE))[0]
+            token_lnk = create_link(client, token)
             template.triple_with_relation(
                 main_node >> "_main_node",
                 sc_types.EDGE_ACCESS_VAR_POS_PERM,
-                username_lnk,
-                sc_types.EDGE_ACCESS_VAR_POS_PERM,
-                rrel_1
-            )
-            template.triple_with_relation(
-                main_node >> "_main_node",
-                sc_types.EDGE_ACCESS_VAR_POS_PERM,
-                password_lnk,
+                token_lnk,
                 sc_types.EDGE_ACCESS_VAR_POS_PERM,
                 rrel_2
             )
-            template.triple_with_relation(
-                main_node >> "_main_node",
-                sc_types.EDGE_ACCESS_VAR_POS_PERM,
-                surname_lnk,
-                sc_types.EDGE_ACCESS_VAR_POS_PERM,
-                rrel_3
-            )
-            template.triple_with_relation(
-                main_node >> "_main_node",
-                sc_types.EDGE_ACCESS_VAR_POS_PERM,
-                name_lnk,
-                sc_types.EDGE_ACCESS_VAR_POS_PERM,
-                rrel_4
-            )
-            template.triple_with_relation(
-                main_node >> "_main_node",
-                sc_types.EDGE_ACCESS_VAR_POS_PERM,
-                fname_lnk,
-                sc_types.EDGE_ACCESS_VAR_POS_PERM,
-                rrel_5
-            )
-            template.triple_with_relation(
-                main_node >> "_main_node",
-                sc_types.EDGE_ACCESS_VAR_POS_PERM,
-                sc_types.NODE_VAR_TUPLE >> "_tuple",
-                sc_types.EDGE_ACCESS_VAR_POS_PERM,
-                rrel_6
-            )
-            template.triple_with_relation(
-                "_tuple",
-                sc_types.EDGE_ACCESS_VAR_POS_PERM,
-                day_node,
-                sc_types.EDGE_ACCESS_VAR_POS_PERM,
-                rrel_user_day
-            )
-            template.triple_with_relation(
-                "_tuple",
-                sc_types.EDGE_ACCESS_VAR_POS_PERM,
-                month_node,
-                sc_types.EDGE_ACCESS_VAR_POS_PERM,
-                rrel_user_month
-            )
-            template.triple_with_relation(
-                "_tuple",
-                sc_types.EDGE_ACCESS_VAR_POS_PERM,
-                year_node,
-                sc_types.EDGE_ACCESS_VAR_POS_PERM,
-                rrel_user_year
-            )
-            template.triple_with_relation(
-                main_node >> "_main_node",
-                sc_types.EDGE_ACCESS_VAR_POS_PERM,
-                reg_place_lnk,
-                sc_types.EDGE_ACCESS_VAR_POS_PERM,
-                rrel_7
-            )
-            template.triple_with_relation(
-                main_node >> "_main_node",
-                sc_types.EDGE_ACCESS_VAR_POS_PERM,
-                gender_node,
-                sc_types.EDGE_ACCESS_VAR_POS_PERM,
-                rrel_8
-            )
-            template.triple(
-                action_agent,
-                sc_types.EDGE_ACCESS_VAR_POS_PERM,
-                "_main_node",
-            )
-            template.triple(
-                initiated_node,
-                sc_types.EDGE_ACCESS_VAR_POS_PERM,
-                "_main_node",
-            )
-
-            event_params = ScEventSubscriptionParams(main_node, ScEventType.AFTER_GENERATE_INCOMING_ARC, call_back)
-            client.events_create(event_params)
-            client.template_generate(template)
-
-            global payload
-            if callback_event.wait(timeout=10):
-                while not payload:
-                    continue
-                return payload
-            else:
-                raise AgentError(524, "Timeout")
-        else:
-            raise ScServerError
         
+        template.triple(
+            action_agent,
+            sc_types.EDGE_ACCESS_VAR_POS_PERM,
+            "_main_node",
+        )
+        template.triple(
+            initiated_node,
+            sc_types.EDGE_ACCESS_VAR_POS_PERM,
+            "_main_node",
+        )
+        
+        event_params = ScEventSubscriptionParams(
+            main_node,
+            ScEventType.AFTER_GENERATE_INCOMING_ARC,  # <- ИСПРАВЛЕНИЕ
+            call_back
+        )
+        client.events_create(event_params)
+        client.template_generate(template)
+        
+        if callback_event.wait(timeout=10):
+            while not payload:
+                continue
+            return payload
+        else:
+            raise AgentError(524, "Timeout")
+
+
+
     def call_user_request_agent(self,
                                 action_name: str,
                                 content: str
@@ -1218,83 +1331,191 @@ class Ostis:
             raise ScServerError
 
 
-class OstisAuthAgent(AuthAgent):
-    """
-    Класс для представления агента аутентификации
-    """
-    def __init__(self):
-        self.ostis = Ostis(Config.OSTIS_URL)
+# ========== VERIFICATION AGENT ==========
 
-    def auth_agent(self, username: str, password: str):
-        """
-        Метод для запуска агента аутентификации
-        :param username: Логин пользователя для аутентификации
-        :param password: Пароль пользователя для аутентификации
-        :return: Словарь со статусом результата выполнения агента аутентификации
-        """
-        global payload
-        payload = None
-        agent_response = self.ostis.call_auth_agent("action_authentication", username, password)
-        if agent_response['message'] == result.SUCCESS:
-            return {"status": AuthStatus.VALID}
-        elif agent_response['message'] == result.FAILURE:
-            return {
-                "status": AuthStatus.INVALID,
-                "message": "Invalid credentials",
-            }
-        raise AgentError
+
+
+class OstisVerificationAgent(VerificationAgent):
+    """
+    Класс для реализации агента верификации через OSTIS
+    """
     
-class OstisRegAgent(RegAgent):
-    """
-    Класс для представления агента регистрации
-    """
     def __init__(self):
         self.ostis = Ostis(Config.OSTIS_URL)
+    
+    def send_token(self, email: str) -> dict:
+        """
+        Отправка токена верификации на email
+        
+        :param email: Email пользователя
+        :return: Словарь со статусом
+        """
+        try:
+            global payload
+            payload = None
+            
+            agent_response = self.ostis.call_verification_agent(
+                action_name="action_verification",
+                email=email,
+                token=None  # None означает режим отправки токена
+            )
+            
+            if agent_response and agent_response.get('message') == result.SUCCESS:
+                return {
+                    "status": VerificationStatus.TOKEN_SENT,
+                    "message": "Токен отправлен на email"
+                }
+            else:
+                return {
+                    "status": VerificationStatus.INVALID,
+                    "message": "Не удалось отправить токен"
+                }
+        except Exception as e:
+            print(f"Error in send_token: {e}")
+            return {
+                "status": VerificationStatus.INVALID,
+                "message": str(e)
+            }
+    
+    def verify_token(self, email: str, token: str) -> dict:
+        """
+        Проверка токена верификации
+        
+        :param email: Email пользователя
+        :param token: Токен для проверки
+        :return: Словарь со статусом
+        """
+        try:
+            global payload
+            payload = None
+            
+            agent_response = self.ostis.call_verification_agent(
+                action_name="action_verification",
+                email=email,
+                token=token
+            )
+            
+            if agent_response and agent_response.get('message') == result.SUCCESS:
+                return {
+                    "status": VerificationStatus.EMAIL_VERIFIED,
+                    "message": "Email успешно подтвержден"
+                }
+            else:
+                return {
+                    "status": VerificationStatus.INVALID,
+                    "message": "Неверный код подтверждения"
+                }
+        except Exception as e:
+            print(f"Error in verify_token: {e}")
+            return {
+                "status": VerificationStatus.INVALID,
+                "message": str(e)
+            }
 
+
+# ========== UPDATED REGISTRATION AGENT ==========
+class OstisRegAgent(RegAgent):
+    def __init__(self):
+        self.ostis = Ostis(Config.OSTIS_URL)
+    
     def reg_agent(
         self,
-        gender: str, 
-        surname: str,
-        name: str,
-        fname: str,
-        birthdate,
-        reg_place: str,
-        username: str,
-        password: str
-        ):
-        """
-        Метод для запуска агента регистрации
-        :param gender: Пол пользователя для регистрации
-        :param surname: Фамилия пользователя для регистрации
-        :param name: Имя пользователя для регистрации
-        :param fname: Отчество пользователя для регистрации
-        :param birthdate: Дата рождения пользователя для регистрации
-        :param reg_place: Место регистрации пользователя для регистрации
-        :param username: Логин пользователя для регистрации
-        :param password: Пароль пользователя для регистрации
-        :return: Словарь со статусом результата выполнения агента регистрации
-        """
-        global payload
-        payload = None
-        agent_response = self.ostis.call_reg_agent(
-            action_name="action_register", 
-            username=username, 
-            password=password,
-            gender=gender,
-            surname=surname,
-            name=name,
-            fname=fname,
-            birthdate=birthdate,
-            reg_place=reg_place
+        email: str,
+        password: str,
+        password_conf: str,
+        user_type: str,
+        full_name: str = None,
+        gender: str = None,
+        age: str = None,
+        experience: str = None,
+        field: str = None
+    ) -> dict:
+        try:
+            global payload
+            payload = None
+            
+            agent_response = self.ostis.call_registration_agent(
+                action_name="action_user_registration",
+                email=email,
+                password=password,
+                password_conf=password_conf,
+                user_type=user_type,
+                full_name=full_name,
+                gender=gender,
+                age=age,
+                experience=experience,
+                field=field
             )
-        if agent_response['message'] == result.SUCCESS:
-            return {"status": RegStatus.CREATED}
-        elif agent_response['message'] == result.FAILURE:
+            
+            if not isinstance(agent_response, dict):
+                return {
+                    "status": RegStatus.EXISTS,
+                    "message": "Invalid response from agent"
+                }
+            
+            if agent_response and agent_response.get('message') == result.SUCCESS:
+                return {
+                    "status": RegStatus.CREATED,
+                    "message": "Пользователь успешно зарегистрирован"
+                }
+            else:
+                error_msg = "Ошибка регистрации"
+                if isinstance(agent_response, dict):
+                    error_msg = agent_response.get('message', error_msg)
+                
+                return {
+                    "status": RegStatus.EXISTS,
+                    "message": str(error_msg)
+                }
+        except Exception as e:
             return {
                 "status": RegStatus.EXISTS,
-                "message": "User with that credentials already exists.",
+                "message": str(e)
+            }
+
+class OstisAuthAgent(AuthAgent):
+    """
+    Класс для реализации агента аутентификации через OSTIS
+    """
+    
+    def __init__(self):
+        self.ostis = Ostis(Config.OSTIS_URL)
+    
+    def auth_agent(self, username: str, password: str) -> dict:
+        """
+        Метод для запуска агента аутентификации
+        
+        :param username: Email пользователя (теперь это email!)
+        :param password: Пароль пользователя
+        :return: Словарь со статусом результата выполнения агента аутентификации
+        """
+        try:
+            global payload
+            payload = None
+            
+            agent_response = self.ostis.call_auth_agent(
+                action_name="action_authentication",
+                email=username,  # username теперь = email
+                password=password
+            )
+            
+            if agent_response and agent_response.get('message') == result.SUCCESS:
+                return {
+                    "status": AuthStatus.VALID,
+                    "message": "Authentication successful"
                 }
-        raise AgentError
+            else:
+                return {
+                    "status": AuthStatus.INVALID,
+                    "message": "Invalid credentials or email not verified"
+                }
+        except Exception as e:
+            print(f"Error in auth_agent: {e}")
+            return {
+                "status": AuthStatus.INVALID,
+                "message": str(e)
+            }
+
 
 class OstisUserRequestAgent(RequestAgent):
     """

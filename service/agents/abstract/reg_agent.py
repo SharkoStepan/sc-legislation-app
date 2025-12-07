@@ -8,39 +8,43 @@ class RegStatus(StrEnum):
     CREATED = "Valid"
     EXISTS = "Invalid"
 
-class Gender(StrEnum):
+class UserType(StrEnum):
     """
-    Перечисление для представления полов пользователя
+    Перечисление для представления типов пользователей
     """
-    MALE = "мужской"
-    FEMALE = "женский"
+    CLIENT = "client"
+    SPECIALIST = "specialist"
 
 class RegAgent(ABC):
     """
     Абстрактный класс для реализации агента регистрации
     """
+    
     @abstractmethod
     def reg_agent(
         self,
-        gender: str, 
-        surname: str,
-        name: str,
-        fname: str,
-        birthdate,
-        reg_place: str,
-        username: str,
-        password: str
-        ) -> dict:
+        email: str,
+        password: str,
+        password_conf: str,
+        user_type: str,
+        full_name: str = None,
+        gender: str = None,
+        age: str = None,
+        experience: str = None,
+        field: str = None
+    ) -> dict:
         """
         Абстрактный метод для запуска агента регистрации
-        :param gender: Пол пользователя для регистрации
-        :param surname: Фамилия пользователя для регистрации
-        :param name: Имя пользователя для регистрации
-        :param fname: Отчество пользователя для регистрации
-        :param birthdate: Дата рождения пользователя для регистрации
-        :param reg_place: Место регистрации пользователя для регистрации
-        :param username: Логин пользователя для регистрации
+        
+        :param email: Email пользователя для регистрации
         :param password: Пароль пользователя для регистрации
+        :param password_conf: Подтверждение пароля
+        :param user_type: Тип пользователя (client или specialist)
+        :param full_name: ФИО специалиста (только для specialist)
+        :param gender: Пол специалиста (только для specialist)
+        :param age: Возраст специалиста (только для specialist)
+        :param experience: Опыт работы специалиста (только для specialist)
+        :param field: Сфера деятельности специалиста (только для specialist)
         :return: Словарь со статусом результата выполнения агента регистрации
         """
         pass

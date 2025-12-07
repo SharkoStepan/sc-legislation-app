@@ -1,42 +1,56 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <title>Выбор шаблона</title>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
-  <link rel="stylesheet" href="static/styles/templates.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Шаблоны - Юридический ассистент</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/document.css') }}">
 </head>
 <body>
-<div class="container">
-  <header>
-    <img src="static/images/logo.png" alt="Логотип" class="header-logo">
-    <nav>
-        <a href="{{ url_for('main.requests') }}"><button class="nav-button">Запросы</button></a>
-        <a href="{{ url_for('main.directory') }}"><button class="nav-button">Справочник</button></a>
-        <a href="{{ url_for('main.show_calendar') }}"><button class="nav-button">Календарь</button></a>
-        <a href="{{ url_for('main.templates') }}"><button class="nav-button active">Шаблоны</button></a>
-        <a href="{{ url_for('main.logout') }}">
-            <img src="static/images/logout.png" alt="Выйти" class="user-icon">
-        </a>
-    </nav>
-</header>
+    <div class="container">
+        <header>
+            <a href="{{ url_for('main.directory') }}">
+                <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Логотип" class="header-logo">
+            </a>
+            <nav>
+                <a href="{{ url_for('main.requests') }}"><button class="nav-button">Запросы</button></a>
+                <a href="{{ url_for('main.directory') }}"><button class="nav-button">Справочник</button></a>
+                <a href="{{ url_for('main.show_calendar') }}"><button class="nav-button">Календарь</button></a>
+                <a href="{{ url_for('main.forum') }}"><button class="nav-button">Форум</button></a>
+            </nav>
+            <a href="{{ url_for('main.logout') }}">
+                <img src="{{ url_for('static', filename='images/logout.png') }}" alt="Выйти" class="user-icon">
+            </a>
+        </header>
 
-  <div class="main-content">
-    <h1 class="header-title">Выберите шаблон</h1>
-    <div class="dropdown">
-      <select>
-        <option value="" disabled selectd>Шаблон 1</option>
-        <option value="template1">Шаблон 1</option>
-        <option value="template2">Шаблон 2</option>
-        <option value="template3">Шаблон 3</option>
-      </select>
+        <main>
+            <h1>Шаблоны документов</h1>
+
+            <div class="templates-grid">
+                <div class="template-card">
+                    <h3>Договор аренды</h3>
+                    <p>Типовой договор аренды жилого помещения</p>
+                    <button class="btn-download">Скачать</button>
+                </div>
+
+                <div class="template-card">
+                    <h3>Исковое заявление</h3>
+                    <p>Шаблон искового заявления в суд</p>
+                    <button class="btn-download">Скачать</button>
+                </div>
+
+                <div class="template-card">
+                    <h3>Доверенность</h3>
+                    <p>Генеральная доверенность</p>
+                    <button class="btn-download">Скачать</button>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>Персональный ассистент по юриспруденции</p>
+            <p>Ostis 2025</p>
+        </footer>
     </div>
-  </div>
-
-  <footer>
-    <p>Персональный ассистент по юриспруденции</p>
-    <p>Ostis 2025</p>
-  </footer>
-</div>
 </body>
 </html>

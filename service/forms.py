@@ -1,52 +1,80 @@
 from flask_wtf import FlaskForm
-from wtforms import StringField, PasswordField, SubmitField, RadioField, HiddenField, TextAreaField
-from wtforms.validators import DataRequired, Length, ValidationError, Regexp
+from wtforms import StringField, PasswordField, SubmitField, RadioField, HiddenField, TextAreaField, SelectField, IntegerField
+from wtforms.validators import DataRequired, Length, ValidationError, Email, EqualTo, NumberRange, Optional
 from datetime import datetime
-
-
-def future_birthdate_check():
-    """
-    Метод для проверки даты рождения на корректность в форме регистрации
-    :return: Метод для проверки даты рождения в виде валидатора
-    """
-    def _future_birthdate_check(form, field):
-        try:
-            day, month, year = map(int, field.data.split('.'))
-            if datetime(year, month, day).date() > datetime.today().date():
-                raise ValidationError("Дата не может быть в будущем")
-        except ValueError:
-            raise ValidationError("Некорректная дата")
-
-    return _future_birthdate_check
 
 
 class LoginForm(FlaskForm):
     """
-    Метод для представления формы для аутентификации
+    Форма для аутентификации (обновлена под email)
     """
-    username = StringField('Логин', validators=[DataRequired()])
+    email = StringField('Email', validators=[DataRequired(), Email(message="Некорректный email")])
     password = PasswordField('Пароль', validators=[DataRequired(), Length(min=8)])
     submit = SubmitField('Войти')
 
 
 class RegistrationForm(FlaskForm):
     """
-    Метод для представления формы для регистрации
+    Форма для регистрации (обновлена под новую схему)
     """
-    username = StringField('Логин', validators=[DataRequired()])
-    password = PasswordField('Пароль', validators=[DataRequired(), Length(min=8)])
-    name = StringField('Имя', validators=[DataRequired()])
-    surname = StringField('Фамилия', validators=[DataRequired()])
-    patronymic = StringField('Отчество', validators=[DataRequired()])
-    gender = RadioField('Пол', choices=[('male', 'Мужской'), ('female', 'Женский')], validators=[DataRequired()])
-    birthdate = StringField('Дата рождения', validators=[
-        DataRequired(),
-        Regexp(r'^\d{2}\.\d{2}\.\d{4}$', message="Формат даты: ДД.ММ.ГГГГ"),
-        future_birthdate_check()
+    email = StringField('Email', validators=[
+        DataRequired(), 
+        Email(message="Некорректный email")
     ])
-    reg_place = StringField('Место регистрации', validators=[DataRequired()])
+    password = PasswordField('Пароль', validators=[
+        DataRequired(), 
+        Length(min=8, message="Минимум 8 символов")
+    ])
+    password_conf = PasswordField('Подтверждение пароля', validators=[
+        DataRequired(),
+        EqualTo('password', message='Пароли должны совпадать')
+    ])
+    user_type = RadioField('Тип пользователя', 
+        choices=[('client', 'Клиент'), ('specialist', 'Специалист')],
+        default='client',
+        validators=[DataRequired()]
+    )
+    
+    # Поля для специалиста (ОПЦИОНАЛЬНЫЕ - валидируем в views.py)
+    full_name = StringField('ФИО', validators=[Optional()])
+    gender = SelectField('Пол', 
+        choices=[
+            ('', 'Выберите'),
+            ('мужской', 'Мужской'),
+            ('женский', 'Женский')
+        ],
+        validators=[Optional()]
+    )
+    age = IntegerField('Возраст', validators=[Optional()])
+    experience = IntegerField('Опыт работы (лет)', validators=[Optional()])
+    field = SelectField('Сфера деятельности', 
+        choices=[
+            ('', 'Выберите'),
+            ('гражданское право', 'Гражданское право'),
+            ('уголовное право', 'Уголовное право'),
+            ('административное право', 'Административное право'),
+            ('трудовое право', 'Трудовое право'),
+            ('семейное право', 'Семейное право'),
+            ('корпоративное право', 'Корпоративное право')
+        ],
+        validators=[Optional()]
+    )
+    
     submit = SubmitField('Зарегистрироваться')
-        
+
+
+class VerificationForm(FlaskForm):
+    """
+    Форма для верификации email
+    """
+    email = StringField('Email', validators=[DataRequired(), Email()])
+    token = StringField('Код подтверждения', validators=[
+        DataRequired(), 
+        Length(min=6, max=6, message="Код должен содержать 6 символов")
+    ])
+    submit = SubmitField('Подтвердить')
+
+
 class AddEventForm(FlaskForm):
     date = HiddenField('Дата', validators=[DataRequired()])
     title = StringField('Название', validators=[DataRequired()])

@@ -9,45 +9,68 @@ from service.agents.abstract.event_agents import AddEventAgent, DeleteEventAgent
 from sc_client.models import ScAddr, ScIdtfResolveParams
 from sc_client.constants import sc_types
 import sc_client.client as client
+from .agents.ostis import OstisVerificationAgent
 
 
-def reg_agent(gender, surname: str, name: str, fname: str, birthdate, reg_place: str, username: str, password: str):
-    """
-    Метод для запуска агента регистрации
-    :param gender: Пол пользователя для регистрации
-    :param surname: Фамилия пользователя для регистрации
-    :param name: Имя пользователя для регистрации
-    :param fname: Отчество пользователя для регистрации
-    :param birthdate: Дата рождения пользователя для регистрации
-    :param reg_place: Место регистрации пользователя для регистрации
-    :param username: Логин пользователя для регистрации
-    :param password: Пароль пользователя для регистрации
-    :return: Словарь со статусом результата выполнения агента регистрации
-    """
-    agent: RegAgent = current_app.config['agents']['reg_agent']
-    return agent.reg_agent(
-        gender=gender, 
-        surname=surname, 
-        name=name, 
-        fname=fname, 
-        birthdate=birthdate, 
-        reg_place=reg_place, 
-        username=username, 
-        password=password
-        )
+from .agents.ostis import OstisAuthAgent, OstisRegAgent, OstisVerificationAgent
+
+# Инициализация агентов
+auth_agent_instance = OstisAuthAgent()
+reg_agent_instance = OstisRegAgent()
+verification_agent_instance = OstisVerificationAgent()
+
 
 def auth_agent(username: str, password: str):
     """
-    Метод для запуска агента аутентификации
-    :param username: Логин пользователя для аутентификации
-    :param password: Пароль пользователя для аутентификации
-    :return: Словарь со статусом результата выполнения агента аутентификации
+    Аутентификация пользователя
+    
+    :param username: Email пользователя
+    :param password: Пароль
+    :return: Результат аутентификации
     """
-    agent: AuthAgent = current_app.config['agents']['auth_agent']
-    return agent.auth_agent(
-        username, 
-        password
-        )
+    return auth_agent_instance.auth_agent(username, password)
+
+
+def reg_agent(
+    email: str,
+    password: str,
+    password_conf: str,
+    user_type: str,
+    full_name: str = None,
+    gender: str = None,
+    age: str = None,
+    experience: str = None,
+    field: str = None
+):
+    """
+    Регистрация пользователя
+    """
+    return reg_agent_instance.reg_agent(
+        email=email,
+        password=password,
+        password_conf=password_conf,
+        user_type=user_type,
+        full_name=full_name,
+        gender=gender,
+        age=age,
+        experience=experience,
+        field=field
+    )
+
+
+def verification_send_token(email: str):
+    """
+    Отправка токена верификации
+    """
+    return verification_agent_instance.send_token(email)
+
+
+def verification_check_token(email: str, token: str):
+    """
+    Проверка токена верификации
+    """
+    return verification_agent_instance.verify_token(email, token)
+
 
 def user_request_agent(content: str):
     """

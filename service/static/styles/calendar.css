@@ -1,433 +1,196 @@
-/* Общие стили */
-html, body {
-    height: 100%;
+/* Сброс стилей */
+* {
     margin: 0;
     padding: 0;
-    font-family: 'Inter', sans-serif;
-    background-color: #f5f7fa;
+    box-sizing: border-box;
 }
 
+body {
+    font-family: 'Inter', Arial, sans-serif;
+    background-color: #F5F7FA;
+    color: #222349;
+}
+
+/* Контейнер */
 .container {
-    display: flex;
-    flex-direction: column;
-    min-height: 100vh;
     max-width: 2000px;
     margin: 0 auto;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
 }
 
-/* Шапка */
+/* Header */
 header {
     background-color: #E9E9FD;
     height: 80px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 20px;
+    padding: 0 40px;
 }
 
 .header-logo {
-    width: 130px;
-    height: 130px;
-    object-fit: contain;
+    width: 120px;
+    height: auto;
+    cursor: pointer;
+    transition: transform 0.2s;
 }
 
-/* Навигационная панель */
+.header-logo:hover {
+    transform: scale(1.05);
+}
+
+/* Навигация */
 nav {
     display: flex;
-    align-items: center;
-    gap: 3px;
+    gap: 10px;
 }
 
 .nav-button {
-    background-color: #E9E9FD;
+    background-color: transparent;
     color: #222349;
     border: none;
-    padding: 16px 32px;
+    padding: 12px 24px;
     border-radius: 10px;
     cursor: pointer;
     font-size: 16px;
-    height: 50px;
+    font-weight: 500;
     transition: background-color 0.3s ease;
-    white-space: nowrap;
 }
 
 .nav-button:hover {
-    background-color: #d8d8f0;
-}
-
-.nav-button:active {
-    background-color: #F5F7FA;
+    background-color: rgba(255, 255, 255, 0.5);
 }
 
 .nav-button.active {
-    background-color: #ffffff;
-    font-weight: 500;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    background-color: #FFFFFF;
 }
 
 .user-icon {
-    width: 40px;
-    height: 40px;
-    object-fit: cover;
-    border-radius: 8px;
-    margin-left: 20px;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: transform 0.2s;
 }
 
-/* Основное содержимое */
-.main-content {
-    display: flex;
-    padding: 70px;
-    gap: 20px;
+.user-icon:hover {
+    transform: scale(1.1);
+}
+
+/* Main */
+main {
     flex: 1;
-}
-
-/* Блок календаря */
-.calendar-section {
-    width: 800px;
-    flex: 2;
-    background-color: white;
-    border-radius: 12px;
     padding: 40px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    max-width: 1200px;
+    margin: 0 auto;
+    width: 100%;
 }
 
+/* Calendar Header */
 .calendar-header {
     display: flex;
-    justify-content: center;
+    justify-content: space-between;
     align-items: center;
-    position: relative;
-    width: 100%;
+    margin-bottom: 32px;
 }
 
-.month-navigation-container {
-    border: 0px solid #E9E9FD;
-    border-radius: 15px;
-    padding: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.month-navigation {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 120px;
-    width: 745px;
-}
-
-.month-title {
-    font-size: 25px;
-    font-weight: 600;
-    color: #4D4FA3;
-    text-align: center;
-    padding: 20px;
-    background-color: #F5F7FA;
-    border-radius: 10px;
-    width: 250px;
-    height: 70px;
-    box-sizing: border-box;
-    text-transform: capitalize;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.month-arrow {
-    color: #4D4FA3;
-    font-size: 20px;
-    cursor: pointer;
-    display: flex;
-    gap: 30px;
-    align-items: center;
-    justify-content: center;
-    width: 160px;
-    height: 60px;
-    background-color: #CBCCED;
-    border-radius: 10px;
-    transition: all 0.3s ease;
-}
-
-.month-arrow:hover {
-    background-color: #E9E9FD;
-}
-
-.month-name {
-    color: #4D4FA3;
-    margin-top: 5px;
-    font-weight: 500;
-    display: block;
-}
-
-.calendar-grid {
-    width: 100%;
-    border-collapse: separate;
-}
-
-.calendar-grid th {
-    padding-inline: 13px;
-    padding-block: 7px;
-    height: 60px;
-}
-
-.calendar-grid td {
-    background-color: transparent;
-    transition: all 0.3s ease;
-    cursor: pointer;
-    padding-inline: 13px;
-    padding-block: 7px;
-    height: 60px;
-}
-
-.calendar-day {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 100%;
-    height: 100%;
-    border-radius: 10px;
-    background-color: #F5F7FA;
-    color: #4D4FA3;
-    font-weight: 600;
-    font-size: 24px;
-}
-
-
-.calendar-grid td .calendar-day {
-    color: #4D4FA3;
-}
-
-.calendar-grid td:hover .calendar-day {
-    background-color: #F5F7FA;
-    border-color: #4D4FA3;
-}
-
-.calendar-grid td.selected .calendar-day {
-    background-color: #CBCCED;
-    border-color: #4D4FA3;
-}
-
-.other-month .calendar-day {
-    color: #B5B6E2;
-    border-color: #F5F7FA;
-}
-
-/* Блок событий */
-.events-section {
-    width: 100%;
-    flex: 1;
-    background-color: white;
-    border-radius: 10px;
-    padding: 20px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.events-title {
-    margin-left: 160px;
-    font-size: 36px;
+.calendar-header h1 {
+    font-size: 32px;
     font-weight: 700;
-    margin-bottom: 20px;
+    color: #222349;
+}
+
+.btn-add-event {
+    background-color: #222349;
+    color: #FFFFFF;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 10px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.btn-add-event:hover {
+    background-color: #4D4FA3;
+}
+
+/* Calendar Container */
+.calendar-container {
+    background-color: #FFFFFF;
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    margin-bottom: 32px;
+    min-height: 400px;
+}
+
+/* Events List */
+.events-list {
+    background-color: #FFFFFF;
+    border-radius: 16px;
+    padding: 32px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.events-list h2 {
+    font-size: 24px;
+    font-weight: 600;
+    color: #222349;
+    margin-bottom: 24px;
+}
+
+/* Event Card */
+.event-card {
+    display: flex;
+    gap: 20px;
+    padding: 20px;
+    border-bottom: 1px solid #E5E7EB;
+}
+
+.event-card:last-child {
+    border-bottom: none;
+}
+
+.event-date {
+    font-size: 14px;
+    font-weight: 600;
     color: #4D4FA3;
+    min-width: 100px;
 }
 
-.event-item {
-    margin-bottom: 20px;
-    border-radius: 10px;
-    padding: 15px;
-    background-color: #F5F7FA;
-}
-
-.event-name {
-    font-size: 15px;
-    font-weight: 400;
+.event-details h3 {
+    font-size: 18px;
+    font-weight: 600;
     color: #222349;
-    margin-bottom: 10px;
-    border-radius: 10px;
-    width: 100%;
-    box-sizing: border-box;
-    border: 0px solid #CBCCED;
-    background-color: #F5F7FA;
+    margin-bottom: 8px;
 }
 
-.event-description {
-    font-size: 12px;
-    color: #666;
-    background-color: white;
-    border-radius: 10px;
-    border: 0px solid #F5F7FA;
-    width: 100%;
-    padding: 10px;
-    box-sizing: border-box;
-    min-height: 80px;
-    resize: vertical;
-}
-
-.event-name::placeholder{
-    color: #222349;
-}
-.event-description::placeholder {
-    color: #B5B6E2;
-}
-
-.delete-button {
-    color: #F5F7FA;
-    background: none;
-    border: none;
-    cursor: pointer;
+.event-details p {
     font-size: 14px;
-    padding: 8px 12px;
-    border-radius: 10px;
-    background-color: #4D4FA3;
-    margin-block: 10px;
-    transition: all 0.3s ease;
+    color: #6B7280;
+    line-height: 1.5;
 }
 
-.delete-button:hover {
-    background-color: #FF5A5F;
-    color: white;
+.empty-events {
+    text-align: center;
+    color: #6B7280;
+    padding: 40px;
+    font-size: 16px;
 }
 
-.add-event-button {
-    color: #F5F7FA;
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: 14px;
-    padding: 8px 12px;
-    border-radius: 10px;
-    background-color: #4D4FA3;
-    margin-block: 10px;
-    transition: all 0.3s ease;
-}
-
-.add-event-button:hover {
-    background-color: #CBCCED;
-    color: #222349;
-}
-
-/* Подвал */
+/* Footer */
 footer {
     background-color: #222349;
-    height: 150px;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-end;
-    align-items: center;
-    text-align: center;
     color: #E9E9FD;
-    padding: 20px;
+    padding: 30px 20px;
+    text-align: center;
 }
 
 footer p {
-    margin-bottom: 2px;
-}
-
-/* Стили для модального окна */
-.modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: rgba(0, 0, 0, 0.5);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 1000;
-    display: none;
-}
-
-.modal-content {
-    background-color: white;
-    border-radius: 12px;
-    width: 420px;
-    height: 420px;
-    padding: 30px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-    display: flex;
-    flex-direction: column;
-}
-
-.modal-title {
-    font-size: 24px;
-    font-weight: 600;
-    color: #4D4FA3;
-    margin-bottom: 20px;
-    text-align: center;
-}
-
-.date-selection {
-    margin-bottom: 20px;
-}
-
-.date-label {
-    font-size: 16px;
-    font-weight: 500;
-    color: #4D4FA3;
-    margin-bottom: 8px;
-    display: block;
-}
-
-
-.date-input {
-    color: #333;
-    background: #fff;
-    padding: 8px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-}
-
-.input-group {
-    margin-bottom: 20px;
-}
-
-.input-label {
-    font-size: 16px;
-    font-weight: 500;
-    color: #4D4FA3;
-    margin-bottom: 8px;
-    display: block;
-}
-
-.event-name-input {
-    width: 100%;
-    padding: 12px;
-    border: 1px solid #E9E9FD;
-    border-radius: 8px;
+    margin: 5px 0;
     font-size: 14px;
-}
-
-.event-description-input {
-    width: 100%;
-    height: 120px;
-    padding: 12px;
-    border: 1px solid #E9E9FD;
-    border-radius: 8px;
-    font-size: 14px;
-    resize: none;
-}
-
-.modal-footer {
-    margin-top: auto;
-    display: flex;
-    justify-content: flex-end;
-}
-
-.save-button {
-    background-color: #4D4FA3;
-    color: white;
-    border: none;
-    border-radius: 8px;
-    padding: 12px 24px;
-    font-size: 16px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background-color 0.3s;
-    align-items: center;
-
-    margin: 10px auto 0;
-}
-
-.save-button:hover {
-    background-color: #3A3B7D;
 }

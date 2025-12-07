@@ -1,197 +1,197 @@
-/* Общие стили */
-html, body {
-    height: 100%;
+/* Сброс стилей */
+* {
     margin: 0;
     padding: 0;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background-color: #f5f7fa;
-    overflow-x: hidden; /* Убираем горизонтальный скролл для всей страницы */
+    box-sizing: border-box;
 }
 
+body {
+    font-family: 'Inter', Arial, sans-serif;
+    background-color: #F5F7FA;
+    color: #222349;
+}
+
+/* Контейнер */
 .container {
-    display: flex;
-    flex-direction: column;
-    min-height: 100vh;
     max-width: 2000px;
     margin: 0 auto;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
 }
 
-/* Шапка */
+/* Header */
 header {
     background-color: #E9E9FD;
     height: 80px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 20px;
+    padding: 0 40px;
 }
 
 .header-logo {
-    width: 130px;
-    height: 130px;
-    object-fit: contain;
+    width: 120px;
+    height: auto;
+    cursor: pointer;
+    transition: transform 0.2s;
 }
 
-/* Навигационная панель */
+.header-logo:hover {
+    transform: scale(1.05);
+}
+
+/* Навигация */
 nav {
     display: flex;
-    align-items: center;
-    gap: 3px;
+    gap: 10px;
 }
 
 .nav-button {
-    background-color: #E9E9FD;
+    background-color: transparent;
     color: #222349;
     border: none;
-    padding: 16px 32px;
+    padding: 12px 24px;
     border-radius: 10px;
     cursor: pointer;
     font-size: 16px;
-    height: 50px;
+    font-weight: 500;
     transition: background-color 0.3s ease;
-    white-space: nowrap;
 }
 
 .nav-button:hover {
-    background-color: #d8d8f0;
-}
-
-.nav-button:active {
-    background-color: #F5F7FA;
+    background-color: rgba(255, 255, 255, 0.5);
 }
 
 .nav-button.active {
-    background-color: #ffffff;
-    font-weight: 500;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    background-color: #FFFFFF;
 }
 
 .user-icon {
-    width: 40px;
-    height: 40px;
-    object-fit: cover;
-    border-radius: 8px;
-    margin-left: 20px;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: transform 0.2s;
 }
 
-/* Основное содержимое */
-.document-container {
+.user-icon:hover {
+    transform: scale(1.1);
+}
+
+/* Main */
+main {
     flex: 1;
-    display: flex;
-    flex-direction: column;
     padding: 40px;
-    position: relative;
-}
-
-.document-title {
-    font-size: 44px;
-    font-weight: 600;
-    color:#4D4FA3;
-    margin-bottom: 30px;
-    margin-left: 550px;
-}
-
-.document-paper {
-    width: 80%;
-    max-width: 900px;
-    height: 700px;
-    background-color: white;
-    border: 1px solid #E9E9FD;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    padding: 40px;
+    max-width: 1200px;
     margin: 0 auto;
-    overflow-y: auto; /* Только вертикальный скролл */
-    overflow-x: hidden; /* Убираем горизонтальный скролл */
+    width: 100%;
 }
 
-.document-content {
-    width: 100%;
-    height: 100%;
-    outline: none;
-    border: none;
-    resize: none;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    font-size: 16px;
+main h1 {
+    font-size: 32px;
+    font-weight: 700;
+    color: #222349;
+    margin-bottom: 32px;
+}
+
+/* Back Link */
+.back-link {
+    display: inline-block;
+    margin-bottom: 24px;
+    color: #4D4FA3;
+    text-decoration: none;
+    font-weight: 600;
+    transition: color 0.2s;
+}
+
+.back-link:hover {
+    color: #222349;
+}
+
+/* Templates Grid */
+.templates-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 24px;
+}
+
+/* Template Card */
+.template-card {
+    background-color: #FFFFFF;
+    padding: 24px;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.template-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
+
+.template-card h3 {
+    font-size: 20px;
+    font-weight: 600;
+    color: #222349;
+    margin-bottom: 12px;
+}
+
+.template-card p {
+    font-size: 14px;
+    color: #6B7280;
+    margin-bottom: 20px;
     line-height: 1.5;
 }
 
-/* Стили для скроллбара документа */
-.document-paper::-webkit-scrollbar {
-    width: 15px; /* Ширина вертикального скроллбара */
-}
-
-.document-paper::-webkit-scrollbar-track {
-    background: #CBCCED;
-    border-radius: 6px;
-    margin: 10px 0;
-
-}
-
-.document-paper::-webkit-scrollbar-thumb {
+.btn-download {
+    width: 100%;
+    padding: 12px;
     background-color: #4D4FA3;
-    border-radius: 15px; /* Овальная форма */
-    height: 15px;
-    width: 15px;
-    border: 2px solid #f1f1f1; /* Отступ вокруг бегунка */
-}
-
-.document-paper::-webkit-scrollbar-thumb:hover {
-    background-color: #3a3c7d;
-}
-
-/* Блок скачивания в правом нижнем углу */
-.download-container {
-    position: absolute;
-    right: 100px;
-    bottom: 10px;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 5px;
-}
-
-.download-button {
-    background-color: #4D4FA3;
-    color: white;
+    color: #FFFFFF;
     border: none;
-    padding: 12px 24px;
-    border-radius: 6px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
     cursor: pointer;
-    font-size: 16px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
     transition: background-color 0.3s ease;
 }
 
-.download-button:hover {
-    background-color: #3a3c7d;
+.btn-download:hover {
+    background-color: #222349;
 }
 
-.download-icon {
-    width: 16px;
-    height: 16px;
+/* Document Viewer */
+.document-viewer {
+    background-color: #FFFFFF;
+    padding: 40px;
+    border-radius: 16px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
-.download-format {
-    color: #4D4FA3;
-    font-size: 14px;
-    text-align: right;
+.document-viewer h1 {
+    font-size: 28px;
+    font-weight: 700;
+    color: #222349;
+    margin-bottom: 24px;
 }
 
-/* Подвал */
+.document-content {
+    font-size: 16px;
+    line-height: 1.8;
+    color: #374151;
+    margin-bottom: 32px;
+}
+
+/* Footer */
 footer {
     background-color: #222349;
-    height: 150px;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-end;
-    align-items: center;
-    text-align: center;
     color: #E9E9FD;
-    padding: 20px;
+    padding: 30px 20px;
+    text-align: center;
 }
 
 footer p {
-    margin-bottom: 2px;
+    margin: 5px 0;
+    font-size: 14px;
 }

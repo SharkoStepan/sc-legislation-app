@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Форум - Юридический ассистент</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/forum.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <a href="{{ url_for('main.index') }}">
+                <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Логотип" class="header-logo">
+            </a>
+            <nav>
+                <a href="{{ url_for('main.requests') }}"><button class="nav-button">Запросы</button></a>
+                <a href="{{ url_for('main.directory') }}"><button class="nav-button">Справочник</button></a>
+                <a href="{{ url_for('main.show_calendar') }}"><button class="nav-button">Календарь</button></a>
+                <a href="{{ url_for('main.forum') }}"><button class="nav-button active">Форум</button></a>
+            </nav>
+            <a href="{{ url_for('main.logout') }}">
+                <img src="{{ url_for('static', filename='images/user.png') }}" alt="Пользователь" class="user-icon">
+            </a>
+        </header>
+
+        <main>
+            <div class="forum-header">
+                <h1>Форум</h1>
+                <a href="{{ url_for('main.forum_create_topic') }}">
+                    <button class="btn-create">+ Создать тему</button>
+                </a>
+            </div>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <div class="topics-container">
+                {% if topics %}
+                    {% for topic in topics %}
+                        <a href="{{ url_for('main.forum_topic', topic_id=topic.id) }}" class="topic-card">
+                            <div class="topic-header">
+                                <h3>{{ topic.title }}</h3>
+                            </div>
+                            <p class="topic-author">Автор: {{ topic.author }}</p>
+                        </a>
+                    {% endfor %}
+                {% else %}
+                    <div class="empty-state">
+                        <p>Тем пока нет. Будьте первым, кто создаст обсуждение!</p>
+                        <a href="{{ url_for('main.forum_create_topic') }}">
+                            <button class="btn-primary">Создать первую тему</button>
+                        </a>
+                    </div>
+                {% endif %}
+            </div>
+        </main>
+
+        <footer>
+            <p>Персональный ассистент по юриспруденции</p>
+            <p>Ostis 2025</p>
+        </footer>
+    </div>
+</body>
+</html>

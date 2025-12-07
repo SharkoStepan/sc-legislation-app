@@ -2,50 +2,53 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Результаты поиска | Юридический справочник</title>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
-    <link rel="stylesheet" href="static/styles/directory-results.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Результаты поиска - Справочник</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/directory-results.css') }}">
 </head>
 <body>
-<div class="container">
-    <header>
-        <img src="static/images/logo.png" alt="Логотип" class="header-logo">
-        <nav>
-            <a href="{{ url_for('main.requests') }}"><button class="nav-button active">Запросы</button></a>
-            <a href="{{ url_for('main.directory') }}"><button class="nav-button">Справочник</button></a>
-            <a href="{{ url_for('main.show_calendar') }}"><button class="nav-button active">Календарь</button></a>
-            <a href="{{ url_for('main.templates') }}"><button class="nav-button">Шаблоны</button></a>
-            <a href="{{ url_for('main.logout') }}">
-                <img src="static/images/logout.png" alt="Выйти" class="user-icon">
+    <div class="container">
+        <header>
+            <a href="{{ url_for('main.directory') }}">
+                <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Логотип" class="header-logo">
             </a>
-        </nav>
-    </header>
+            <nav>
+                <a href="{{ url_for('main.requests') }}"><button class="nav-button">Запросы</button></a>
+                <a href="{{ url_for('main.directory') }}"><button class="nav-button active">Справочник</button></a>
+                <a href="{{ url_for('main.show_calendar') }}"><button class="nav-button">Календарь</button></a>
+                <a href="{{ url_for('main.forum') }}"><button class="nav-button">Форум</button></a>
+            </nav>
+            <a href="{{ url_for('main.logout') }}">
+                <img src="{{ url_for('static', filename='images/logout.png') }}" alt="Выйти" class="user-icon">
+            </a>
+        </header>
 
-    <main class="main-content">
-        <div class="search-directory-results-header">
-            <h2 class="search-directory-results-title">Результаты поиска по запросу: "{{ query }}"</h2>
-        </div>
+        <main>
+            <a href="{{ url_for('main.directory') }}" class="back-link">← Назад к справочнику</a>
 
-        <div id="searchDirectoryResultsContainer">
-            {% if results %}
-                {% for item in results %}
-                <div class="article-directory-result">
-                    <div class="article-directory-title">{{ item.title }}</div>
-                    <p class="article-directory-content">{{ item.content }}</p>
+            <div class="results-container">
+                <div class="search-query">
+                    <h2>Результаты поиска: "{{ query }}"</h2>
                 </div>
-                {% endfor %}
-            {% else %}
-                <div class="article-directory-result">
-                    <p class="article-directory-content">Ничего не найдено</p>
-                </div>
-            {% endif %}
-        </div>
-    </main>
 
-    <footer>
-        <p>Персональный ассистент по юриспруденции</p>
-        <p>Ostis 2025</p>
-    </footer>
-</div>
+                {% if results %}
+                    {% for result in results %}
+                    <div class="result-card">
+                        <h3>{{ result }}</h3>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="empty-state">
+                        <p>Ничего не найдено</p>
+                    </div>
+                {% endif %}
+            </div>
+        </main>
+
+        <footer>
+            <p>Персональный ассистент по юриспруденции</p>
+            <p>Ostis 2025</p>
+        </footer>
+    </div>
 </body>
 </html>

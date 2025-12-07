@@ -1,102 +1,142 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Регистрация</title>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
-  <link rel="stylesheet" href="static/styles/registration.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Регистрация - Юридический ассистент</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/registration.css') }}">
 </head>
 <body>
-  <div class="container">
-    <header>
-      <img src="static/images/logo.png" alt="Логотип" class="header-logo">
-      <nav>
-        <a href="{{ url_for('main.requests') }}"><button class="nav-button">Запросы</button></a>
-        <a href="{{ url_for('main.directory') }}"><button class="nav-button">Справочник</button></a>
-        <a href="{{ url_for('main.show_calendar') }}"><button class="nav-button">Календарь</button></a>
-        <a href="{{ url_for('main.templates') }}"><button class="nav-button">Шаблоны</button></a>
-      </nav>
-    </header>
-    <main>
-      <img src="static/images/logo.png" alt="Логотип" class="main-logo">
-      
-      <div class="registr-form">
-        <form method="POST" action="{{ url_for('main.reg') }}">
-          <h2>Регистрация</h2>
-          
-        <div class="form-group">
-            <label>Ваш пол:</label>
-            <div class="radio-group">
-                {% for subfield in form.gender %}
-                <div class="radio-item">
-                    {{ subfield(id="gender-" + loop.index|string) }}
-                    {{ subfield.label(for="gender-" + loop.index|string) }}
-                </div>
-                {% endfor %}
+    <div class="container">
+        <header>
+            <a href="{{ url_for('main.auth') }}">
+                <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Логотип" class="header-logo">
+            </a>
+            <nav>
+                <a href="{{ url_for('main.auth') }}"><button class="nav-button">Вход</button></a>
+            </nav>
+        </header>
+
+        <main>
+            <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Логотип" class="main-logo">
+            
+            <div class="form-container">
+                <h2>Регистрация</h2>
+                
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="alert alert-{{ category }}">
+                                {{ message }}
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+
+                <form method="POST" action="{{ url_for('main.reg') }}">
+                    {{ form.csrf_token }}
+                    
+                    <div class="form-group">
+                        {{ form.email.label }}
+                        {{ form.email(class="form-control", placeholder="example@mail.com") }}
+                        {% if form.email.errors %}
+                            <span class="error">{{ form.email.errors[0] }}</span>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        {{ form.password.label }}
+                        {{ form.password(class="form-control", placeholder="Введите пароль") }}
+                        {% if form.password.errors %}
+                            <span class="error">{{ form.password.errors[0] }}</span>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        {{ form.password_conf.label }}
+                        {{ form.password_conf(class="form-control", placeholder="Повторите пароль") }}
+                        {% if form.password_conf.errors %}
+                            <span class="error">{{ form.password_conf.errors[0] }}</span>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label>Тип аккаунта:</label>
+                        <div class="radio-group">
+                            {% for subfield in form.user_type %}
+                            <label class="radio-option">
+                                {{ subfield }}
+                                <span>{{ subfield.label.text }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <!-- Дополнительные поля для специалиста (скрыты по умолчанию) -->
+                    <div id="specialist-fields" style="display: none;">
+                        <div class="form-group">
+                            {{ form.full_name.label }}
+                            {{ form.full_name(class="form-control", placeholder="Иванов Иван Иванович") }}
+                        </div>
+
+                        <div class="form-group">
+                            {{ form.gender.label }}
+                            {{ form.gender(class="form-control") }}
+                        </div>
+
+                        <div class="form-group">
+                            {{ form.age.label }}
+                            {{ form.age(class="form-control", placeholder="25") }}
+                        </div>
+
+                        <div class="form-group">
+                            {{ form.experience.label }}
+                            {{ form.experience(class="form-control", placeholder="3") }}
+                        </div>
+
+                        <div class="form-group">
+                            {{ form.field.label }}
+                            {{ form.field(class="form-control") }}
+                        </div>
+                    </div>
+
+                    {{ form.submit(class="btn-submit") }}
+                    
+                    <p class="form-footer">
+                        Уже есть аккаунт? <a href="{{ url_for('main.auth') }}">Войти</a>
+                    </p>
+                </form>
             </div>
-        </div>
+        </main>
 
-        {{ form.csrf_token }}
-        <div class="form-group">
-            {{ form.surname.label }} {{ form.surname}}
-            {{ form.name.label }} {{ form.name }}
-            {{ form.patronymic.label }} {{ form.patronymic }}
-        </div>
-          
-          <label for="birthdate-text">Дата рождения</label>
-          <div class="date-picker">
-            <input type="text" name="birthdate" id="birthdate-text" placeholder="ДД.ММ.ГГГГ">
-            <button type="button" id="calendar-button">
-              <img src="static/images/calendar.png" alt="Календарь" class="calendar">
-            </button>
-            <input type="date" id="birthdate" name="birthdate" hidden>
-          </div>
-          <div class="form-group">
-            {{ form.reg_place.label }} {{ form.reg_place }}
-            {{ form.username.label }} {{ form.username }}
-            {{ form.password.label }} {{ form.password }}
-          </div>
-          {{ form.submit }}
-          <a href="auth">Войти</a>
-        </form>
-      </div>
-    
-    </main>
-    <footer>
-      <p>Персональный ассистент по юриспруденции</p>
-      <p>Ostis 2025</p>
-    </footer>
-  </div>
-</body>
-<script>
-  document.addEventListener("DOMContentLoaded", function () {
-    const dateInput = document.getElementById("birthdate");
-    const textInput = document.getElementById("birthdate-text");
-    const calendarButton = document.getElementById("calendar-button");
+        <footer>
+            <p>Персональный ассистент по юриспруденции</p>
+            <p>Ostis 2025</p>
+        </footer>
+    </div>
 
-    calendarButton.addEventListener("click", () => {
-        dateInput.showPicker();
-    });
+    <script>
+        // Показ/скрытие дополнительных полей для специалиста
+        document.addEventListener('DOMContentLoaded', function() {
+            const userTypeRadios = document.querySelectorAll('input[name="user_type"]');
+            const specialistFields = document.getElementById('specialist-fields');
 
-    dateInput.addEventListener("change", () => {
-        if (dateInput.value) {
-            textInput.value = dateInput.value.split("-").reverse().join(".");
-        }
-    });
-
-    textInput.addEventListener("input", () => {
-        const dateParts = textInput.value.split(".");
-        if (dateParts.length === 3) {
-            const [day, month, year] = dateParts;
-            if (day.length === 2 && month.length === 2 && year.length === 4) {
-                const isoDate = `${year}-${month}-${day}`;
-                if (!isNaN(Date.parse(isoDate))) {
-                    dateInput.value = isoDate;
+            function toggleSpecialistFields() {
+                const selectedType = document.querySelector('input[name="user_type"]:checked');
+                if (selectedType && selectedType.value === 'specialist') {
+                    specialistFields.style.display = 'block';
+                } else {
+                    specialistFields.style.display = 'none';
                 }
             }
-        }
-    });
-});
-</script>
+
+            userTypeRadios.forEach(radio => {
+                radio.addEventListener('change', toggleSpecialistFields);
+            });
+
+            // Проверка при загрузке страницы
+            toggleSpecialistFields();
+        });
+    </script>
+</body>
 </html>

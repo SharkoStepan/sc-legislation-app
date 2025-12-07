@@ -1,48 +1,44 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <title>Документ по шаблону</title>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
-  <link rel="stylesheet" href="static/styles/document.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Документ - Юридический ассистент</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/document.css') }}">
 </head>
 <body>
-<div class="container">
-    <header>
-        <img src="static/images/logo.png" alt="Логотип" class="header-logo">
-        <nav>
-            <a href="{{ url_for('main.requests') }}"><button class="nav-button">Запросы</button></a>
-            <a href="{{ url_for('main.directory') }}"><button class="nav-button">Справочник</button></a>
-            <a href="{{ url_for('main.show_calendar') }}"><button class="nav-button">Календарь</button></a>
-            <a href="{{ url_for('main.templates') }}"><button class="nav-button active">Шаблоны</button></a>
-            <a href="{{ url_for('main.logout') }}">
-                <img src="static/images/logout.png" alt="Выйти" class="user-icon">
+    <div class="container">
+        <header>
+            <a href="{{ url_for('main.index') }}">
+                <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Логотип" class="header-logo">
             </a>
-        </nav>
-    </header>
+            <nav>
+                <a href="{{ url_for('main.requests') }}"><button class="nav-button">Запросы</button></a>
+                <a href="{{ url_for('main.directory') }}"><button class="nav-button">Справочник</button></a>
+                <a href="{{ url_for('main.show_calendar') }}"><button class="nav-button">Календарь</button></a>
+                <a href="{{ url_for('main.forum') }}"><button class="nav-button">Форум</button></a>
+            </nav>
+            <a href="{{ url_for('main.logout') }}">
+                <img src="{{ url_for('static', filename='images/logout.png') }}" alt="Выйти" class="user-icon">
+            </a>
+        </header>
 
-  <div class="document-container">
-    <h1 class="document-title">Документ по шаблону</h1>
+        <main>
+            <a href="{{ url_for('main.templates') }}" class="back-link">← Назад к шаблонам</a>
 
-    <div class="document-paper">
-      <textarea class="document-content" placeholder="Начните вводить текст здесь..."></textarea>
+            <div class="document-viewer">
+                <h1>{{ document.title }}</h1>
+                <div class="document-content">
+                    {{ document.content | safe }}
+                </div>
+                <button class="btn-download">Скачать документ</button>
+            </div>
+        </main>
+
+        <footer>
+            <p>Персональный ассистент по юриспруденции</p>
+            <p>Ostis 2025</p>
+        </footer>
     </div>
-
-    <div class="download-container">
-      <button class="download-button">
-        <svg class="download-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M12 15V3M12 15L8 11M12 15L16 11M21 15V19C21 20.1046 20.1046 21 19 21H5C3.89543 21 3 20.1046 3 19V15" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        Скачать
-      </button>
-      <span class="download-format">В формате .docx</span>
-    </div>
-  </div>
-
-  <footer>
-    <p>Персональный ассистент по юриспруденции</p>
-    <p>Ostis 2025</p>
-  </footer>
-</div>
 </body>
 </html>
