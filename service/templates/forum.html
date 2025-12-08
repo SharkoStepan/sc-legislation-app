@@ -44,7 +44,7 @@
             <div class="topics-container">
                 {% if topics %}
                     {% for topic in topics %}
-                        <a href="{{ url_for('main.forum_topic', topic_id=topic.id) }}" class="topic-card">
+                        <a href="{{ url_for('main.forum_topic', topic_addr=topic.addr) }}" class="topic-card">
                             <div class="topic-header">
                                 <h3>{{ topic.title }}</h3>
                             </div>

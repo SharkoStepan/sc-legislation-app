@@ -380,6 +380,140 @@ def call_back_get_events(src: ScAddr, connector: ScAddr, trg: ScAddr) -> Enum:
         return result.FAILURE
     return result.SUCCESS
 
+def callback_rating(src: ScAddr, connector: ScAddr, trg: ScAddr):
+    """
+    Специальный callback для RatingUpdateAgent - извлекает рейтинг
+    """
+    global payload
+    callback_event.clear()
+
+    succ_node = client.resolve_keynodes(
+        ScIdtfResolveParams(idtf="action_finished_successfully", type=sc_types.NODE_CONST_CLASS)
+    )[0]
+    unsucc_node = client.resolve_keynodes(
+        ScIdtfResolveParams(idtf="action_finished_unsuccessfully", type=sc_types.NODE_CONST_CLASS)
+    )[0]
+    node_err = client.resolve_keynodes(
+        ScIdtfResolveParams(idtf="action_finished_with_error", type=sc_types.NODE_CONST_CLASS)
+    )[0]
+
+    if trg.value == succ_node.value:
+        # Извлекаем результат с рейтингом
+        nrel_result = client.resolve_keynodes(
+            ScIdtfResolveParams(idtf="nrel_result", type=sc_types.NODE_CONST_CLASS)
+        )[0]
+        
+        res_templ = ScTemplate()
+        res_templ.triple_with_relation(
+            src,
+            sc_types.EDGE_D_COMMON_VAR,
+            sc_types.NODE_VAR_STRUCT >> "res_struct",
+            sc_types.EDGE_ACCESS_VAR_POS_PERM,
+            nrel_result
+        )
+        res_templ.triple(
+            "res_struct",
+            sc_types.EDGE_ACCESS_VAR_POS_PERM,
+            sc_types.LINK_VAR >> "rating_link"
+        )
+        
+        genres = client.template_search(res_templ)
+        
+        if genres and len(genres) > 0:
+            try:
+                rating_link = genres[0].get("rating_link")
+                rating_data = client.get_link_content(rating_link)
+                
+                if rating_data and len(rating_data) > 0:
+                    rating_value = int(rating_data[0].data)
+                    payload = {"message": result.SUCCESS, "rating": rating_value}
+                    print(f"DEBUG: Extracted rating = {rating_value}")
+                else:
+                    payload = {"message": result.SUCCESS, "rating": 0}
+            except Exception as e:
+                print(f"Error extracting rating: {e}")
+                payload = {"message": result.SUCCESS, "rating": 0}
+        else:
+            print("WARNING: No result structure found, returning rating=0")
+            payload = {"message": result.SUCCESS, "rating": 0}
+            
+    elif trg.value == unsucc_node.value or trg.value == node_err.value:
+        payload = {"message": result.FAILURE}
+
+    callback_event.set()
+    
+    if not payload:
+        return result.FAILURE
+    
+    return result.SUCCESS
+
+def callback_check_answer(src: ScAddr, connector: ScAddr, trg: ScAddr):
+    """
+    Специальный callback для CheckTheAnswerAgent - извлекает правильность ответа
+    """
+    global payload
+    callback_event.clear()
+
+    succ_node = client.resolve_keynodes(
+        ScIdtfResolveParams(idtf="action_finished_successfully", type=sc_types.NODE_CONST_CLASS)
+    )[0]
+    unsucc_node = client.resolve_keynodes(
+        ScIdtfResolveParams(idtf="action_finished_unsuccessfully", type=sc_types.NODE_CONST_CLASS)
+    )[0]
+    node_err = client.resolve_keynodes(
+        ScIdtfResolveParams(idtf="action_finished_with_error", type=sc_types.NODE_CONST_CLASS)
+    )[0]
+
+    if trg.value == succ_node.value:
+        # Извлекаем результат проверки
+        nrel_result = client.resolve_keynodes(
+            ScIdtfResolveParams(idtf="nrel_result", type=sc_types.NODE_CONST_CLASS)
+        )[0]
+        
+        res_templ = ScTemplate()
+        res_templ.triple_with_relation(
+            src,
+            sc_types.EDGE_D_COMMON_VAR,
+            sc_types.NODE_VAR_STRUCT >> "res_struct",
+            sc_types.EDGE_ACCESS_VAR_POS_PERM,
+            nrel_result
+        )
+        res_templ.triple(
+            "res_struct",
+            sc_types.EDGE_ACCESS_VAR_POS_PERM,
+            sc_types.LINK_VAR >> "result_link"
+        )
+        
+        genres = client.template_search(res_templ)
+        
+        if genres and len(genres) > 0:
+            try:
+                result_link = genres[0].get("result_link")
+                result_data = client.get_link_content(result_link)
+                
+                if result_data and len(result_data) > 0:
+                    is_correct = result_data[0].data == "1"
+                    payload = {"message": result.SUCCESS, "is_correct": is_correct}
+                    print(f"DEBUG: Answer is correct = {is_correct}")
+                else:
+                    payload = {"message": result.SUCCESS, "is_correct": False}
+            except Exception as e:
+                print(f"Error extracting check result: {e}")
+                payload = {"message": result.SUCCESS, "is_correct": False}
+        else:
+            print("WARNING: No result structure found for check answer")
+            payload = {"message": result.SUCCESS, "is_correct": False}
+            
+    elif trg.value == unsucc_node.value or trg.value == node_err.value:
+        payload = {"message": result.FAILURE}
+
+    callback_event.set()
+    
+    if not payload:
+        return result.FAILURE
+    
+    return result.SUCCESS
+
 class Ostis:
     """
     Класс для представления OSTIS-системы
@@ -1158,26 +1292,33 @@ class Ostis:
 
 
     def call_check_answer_agent(self, action_name: str, username: str, question_addr) -> dict:
-        """Вызов CheckTheAnswerAgent"""
+        """CheckTheAnswerAgent"""
         if is_connected():
             from service.models import get_user_by_login
+            
             user = get_user_by_login(username)
             if not user:
                 raise Exception(f"User node for {username} not found")
             
-            rrel_1 = client.resolve_keynodes(ScIdtfResolveParams(idtf='rrel_1', type=sc_types.NODE_CONST_ROLE))[0]
-            rrel_2 = client.resolve_keynodes(ScIdtfResolveParams(idtf='rrel_2', type=sc_types.NODE_CONST_ROLE))[0]
-            initiated_node = client.resolve_keynodes(ScIdtfResolveParams(idtf='action_initiated', type=sc_types.NODE_CONST_CLASS))[0]
+            rrel_1 = client.resolve_keynodes(ScIdtfResolveParams(idtf="rrel_1", type=sc_types.NODE_CONST_ROLE))[0]
+            rrel_2 = client.resolve_keynodes(ScIdtfResolveParams(idtf="rrel_2", type=sc_types.NODE_CONST_ROLE))[0]
+            initiated_node = client.resolve_keynodes(ScIdtfResolveParams(idtf="action_initiated", type=sc_types.NODE_CONST_CLASS))[0]
             action_agent = client.resolve_keynodes(ScIdtfResolveParams(idtf=action_name, type=sc_types.NODE_CONST_CLASS))[0]
+            
             main_node = get_node(client)
             
             template = ScTemplate()
-            template.triple_with_relation(main_node >> "_main_node", sc_types.EDGE_ACCESS_VAR_POS_PERM, question_addr, sc_types.EDGE_ACCESS_VAR_POS_PERM, rrel_1)
-            template.triple_with_relation("_main_node", sc_types.EDGE_ACCESS_VAR_POS_PERM, user, sc_types.EDGE_ACCESS_VAR_POS_PERM, rrel_2)
-            template.triple(action_agent, sc_types.EDGE_ACCESS_VAR_POS_PERM, "_main_node")
-            template.triple(initiated_node, sc_types.EDGE_ACCESS_VAR_POS_PERM, "_main_node")
+            template.triple_with_relation(main_node, sc_types.EDGE_ACCESS_VAR_POS_PERM, question_addr, sc_types.EDGE_ACCESS_VAR_POS_PERM, rrel_1)
+            template.triple_with_relation(main_node, sc_types.EDGE_ACCESS_VAR_POS_PERM, user, sc_types.EDGE_ACCESS_VAR_POS_PERM, rrel_2)
+            template.triple(action_agent, sc_types.EDGE_ACCESS_VAR_POS_PERM, main_node)
+            template.triple(initiated_node, sc_types.EDGE_ACCESS_VAR_POS_PERM, main_node)
             
-            event_params = ScEventSubscriptionParams(main_node, ScEventType.AFTER_GENERATE_INCOMING_ARC, call_back)
+            # ✅ ИСПОЛЬЗУЕМ callback_check_answer
+            event_params = ScEventSubscriptionParams(
+                main_node,
+                ScEventType.AFTER_GENERATE_INCOMING_ARC,
+                callback_check_answer  # ← ИЗМЕНЕНИЕ ЗДЕСЬ!
+            )
             client.events_create(event_params)
             client.template_generate(template)
             
@@ -1191,7 +1332,7 @@ class Ostis:
             else:
                 raise AgentError(524, "Timeout")
         else:
-            raise ScServerError
+            raise ScServerError()
 
     def call_search_answers_agent(self, action_name: str, question_addr: ScAddr) -> dict:
         """Вызов SearchAnswersForQuestionAgent"""
@@ -1297,24 +1438,37 @@ class Ostis:
             raise ScServerError
         
     def call_rating_update_agent(self, action_name: str, username: str) -> dict:
-        """Вызов RatingUpdateAgent"""
+        """RatingUpdateAgent"""
         if is_connected():
             from service.models import get_user_by_login
+            
             user = get_user_by_login(username)
             if not user:
                 raise Exception(f"User node for {username} not found")
             
-            rrel_1 = client.resolve_keynodes(ScIdtfResolveParams(idtf='rrel_1', type=sc_types.NODE_CONST_ROLE))[0]
-            initiated_node = client.resolve_keynodes(ScIdtfResolveParams(idtf='action_initiated', type=sc_types.NODE_CONST_CLASS))[0]
+            rrel_1 = client.resolve_keynodes(ScIdtfResolveParams(idtf="rrel_1", type=sc_types.NODE_CONST_ROLE))[0]
+            initiated_node = client.resolve_keynodes(ScIdtfResolveParams(idtf="action_initiated", type=sc_types.NODE_CONST_CLASS))[0]
             action_agent = client.resolve_keynodes(ScIdtfResolveParams(idtf=action_name, type=sc_types.NODE_CONST_CLASS))[0]
+            
             main_node = get_node(client)
             
             template = ScTemplate()
-            template.triple_with_relation(main_node >> "_main_node", sc_types.EDGE_ACCESS_VAR_POS_PERM, user, sc_types.EDGE_ACCESS_VAR_POS_PERM, rrel_1)
-            template.triple(action_agent, sc_types.EDGE_ACCESS_VAR_POS_PERM, "_main_node")
-            template.triple(initiated_node, sc_types.EDGE_ACCESS_VAR_POS_PERM, "_main_node")
+            template.triple_with_relation(
+                main_node,
+                sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                user,
+                sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                rrel_1
+            )
+            template.triple(action_agent, sc_types.EDGE_ACCESS_VAR_POS_PERM, main_node)
+            template.triple(initiated_node, sc_types.EDGE_ACCESS_VAR_POS_PERM, main_node)
             
-            event_params = ScEventSubscriptionParams(main_node, ScEventType.AFTER_GENERATE_INCOMING_ARC, call_back)
+            # ✅ ИСПОЛЬЗУЕМ callback_rating вместо callback
+            event_params = ScEventSubscriptionParams(
+                main_node,
+                ScEventType.AFTER_GENERATE_INCOMING_ARC,
+                callback_rating  # ← ИЗМЕНЕНИЕ ЗДЕСЬ!
+            )
             client.events_create(event_params)
             client.template_generate(template)
             
@@ -1328,7 +1482,478 @@ class Ostis:
             else:
                 raise AgentError(524, "Timeout")
         else:
-            raise ScServerError
+            raise ScServerError()
+        
+        # ========== МЕТОДЫ ДЛЯ ФОРУМА ==========
+    
+        # ========== МЕТОДЫ ДЛЯ ФОРУМА ==========
+    
+    def call_add_topic_agent(self, action_name: str, username: str, title: str, description: str):
+        """Создает новый топик на форуме"""
+        if is_connected():
+            from service.models import get_user_by_login
+            user = get_user_by_login(username)
+            if not user:
+                raise Exception(f"User not found: {username}")
+            
+            # Создаем links для заголовка и описания
+            title_link = create_link(client, title)
+            description_link = create_link(client, description)
+            
+            # Получаем keynodes
+            rrel_1 = client.resolve_keynodes(ScIdtfResolveParams(idtf="rrel_1", type=sc_types.NODE_CONST_ROLE))[0]
+            rrel_2 = client.resolve_keynodes(ScIdtfResolveParams(idtf="rrel_2", type=sc_types.NODE_CONST_ROLE))[0]
+            rrel_3 = client.resolve_keynodes(ScIdtfResolveParams(idtf="rrel_3", type=sc_types.NODE_CONST_ROLE))[0]
+            initiated_node = client.resolve_keynodes(ScIdtfResolveParams(idtf="action_initiated", type=sc_types.NODE_CONST_CLASS))[0]
+            action_agent = client.resolve_keynodes(ScIdtfResolveParams(idtf=action_name, type=sc_types.NODE_CONST_CLASS))[0]
+            
+            # Создаем action
+            main_node = get_node(client)
+            
+            template = ScTemplate()
+            template.triple_with_relation(
+                main_node,
+                sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                user,
+                sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                rrel_1
+            )
+            template.triple_with_relation(
+                main_node,
+                sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                title_link,
+                sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                rrel_2
+            )
+            template.triple_with_relation(
+                main_node,
+                sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                description_link,
+                sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                rrel_3
+            )
+            template.triple(action_agent, sc_types.EDGE_ACCESS_VAR_POS_PERM, main_node)
+            template.triple(initiated_node, sc_types.EDGE_ACCESS_VAR_POS_PERM, main_node)
+            
+            event_params = ScEventSubscriptionParams(main_node, ScEventType.AFTER_GENERATE_INCOMING_ARC, call_back)
+            client.events_create(event_params)
+            client.template_generate(template)
+            
+            global payload
+            payload = None
+            if callback_event.wait(timeout=10):
+                while not payload:
+                    continue
+                return payload
+            else:
+                raise AgentError(524, "Timeout")
+        else:
+            raise ScServerError()
+    
+    
+    def call_add_message_agent(self, action_name: str, username: str, topic_addr: ScAddr, message_text: str):
+        """Добавляет сообщение в топик"""
+        if is_connected():
+            from service.models import get_user_by_login
+            user = get_user_by_login(username)
+            if not user:
+                raise Exception(f"User not found: {username}")
+            
+            # Создаем link для текста сообщения
+            message_link = create_link(client, message_text)
+            
+            # Получаем keynodes
+            rrel_1 = client.resolve_keynodes(ScIdtfResolveParams(idtf="rrel_1", type=sc_types.NODE_CONST_ROLE))[0]
+            rrel_2 = client.resolve_keynodes(ScIdtfResolveParams(idtf="rrel_2", type=sc_types.NODE_CONST_ROLE))[0]
+            rrel_3 = client.resolve_keynodes(ScIdtfResolveParams(idtf="rrel_3", type=sc_types.NODE_CONST_ROLE))[0]
+            initiated_node = client.resolve_keynodes(ScIdtfResolveParams(idtf="action_initiated", type=sc_types.NODE_CONST_CLASS))[0]
+            action_agent = client.resolve_keynodes(ScIdtfResolveParams(idtf=action_name, type=sc_types.NODE_CONST_CLASS))[0]
+            
+            # Создаем action
+            main_node = get_node(client)
+            
+            template = ScTemplate()
+            template.triple_with_relation(
+                main_node,
+                sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                user,
+                sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                rrel_1
+            )
+            template.triple_with_relation(
+                main_node,
+                sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                topic_addr,
+                sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                rrel_2
+            )
+            template.triple_with_relation(
+                main_node,
+                sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                message_link,
+                sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                rrel_3
+            )
+            template.triple(action_agent, sc_types.EDGE_ACCESS_VAR_POS_PERM, main_node)
+            template.triple(initiated_node, sc_types.EDGE_ACCESS_VAR_POS_PERM, main_node)
+            
+            event_params = ScEventSubscriptionParams(main_node, ScEventType.AFTER_GENERATE_INCOMING_ARC, call_back)
+            client.events_create(event_params)
+            client.template_generate(template)
+            
+            global payload
+            payload = None
+            if callback_event.wait(timeout=10):
+                while not payload:
+                    continue
+                return payload
+            else:
+                raise AgentError(524, "Timeout")
+        else:
+            raise ScServerError()
+    
+    
+    def get_all_topics(self):
+        """Получает список всех топиков форума"""
+        if is_connected():
+            try:
+                concept_topic = client.resolve_keynodes(ScIdtfResolveParams(idtf="concept_topic", type=sc_types.NODE_CONST_CLASS))[0]
+                print(f"DEBUG: concept_topic = {concept_topic}")
+                
+                nrel_topic_title = client.resolve_keynodes(ScIdtfResolveParams(idtf="nrel_topic_title", type=sc_types.NODE_CONST_NOROLE))[0]
+                nrel_author = client.resolve_keynodes(ScIdtfResolveParams(idtf="nrel_author", type=sc_types.NODE_CONST_NOROLE))[0]
+                
+                # Шаблон: concept_topic -> topic
+                template = ScTemplate()
+                template.triple(
+                    concept_topic,
+                    sc_types.EDGE_ACCESS_VAR_POS_PERM >> "_topic_arc",
+                    sc_types.NODE_VAR >> "_topic"
+                )
+                
+                result = client.template_search(template)
+                print(f"DEBUG: Found {len(result)} topics")
+                topics = []
+                
+                for item in result:
+                    topic_addr = item.get("_topic")
+                    
+                    # Получаем заголовок
+                    title_template = ScTemplate()
+                    title_template.triple(
+                        topic_addr,
+                        sc_types.EDGE_D_COMMON_VAR >> "_title_arc",
+                        sc_types.LINK_VAR >> "_title_link"
+                    )
+                    title_template.triple(
+                        nrel_topic_title,
+                        sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                        "_title_arc"
+                    )
+                    
+                    title_result = client.template_search(title_template)
+                    title = ""
+                    if title_result:
+                        title_link = title_result[0].get("_title_link")
+                        title = client.get_link_content(title_link)[0].data
+                    
+                    # Получаем автора
+                    author_template = ScTemplate()
+                    author_template.triple(
+                        topic_addr,
+                        sc_types.EDGE_D_COMMON_VAR >> "_author_arc",
+                        sc_types.NODE_VAR >> "_author"
+                    )
+                    author_template.triple(
+                        nrel_author,
+                        sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                        "_author_arc"
+                    )
+                    
+                    author_result = client.template_search(author_template)
+                    author_display = "Unknown"
+                    if author_result:
+                        author_addr = author_result[0].get("_author")
+                        author_display = self.format_user_display(author_addr)
+                    
+                    topics.append({
+                        'addr': topic_addr.value,
+                        'title': title,
+                        'author': author_display
+                    })
+                
+                return topics
+                
+            except Exception as e:
+                print(f"Error getting topics: {e}")
+                return []
+        else:
+            raise ScServerError()
+    
+    
+    def get_topic_details(self, topic_addr: ScAddr):
+        """Получает детали топика: заголовок, описание, автор"""
+        if is_connected():
+            try:
+                nrel_topic_title = client.resolve_keynodes(ScIdtfResolveParams(idtf="nrel_topic_title", type=sc_types.NODE_CONST_NOROLE))[0]
+                nrel_topic_description = client.resolve_keynodes(ScIdtfResolveParams(idtf="nrel_topic_description", type=sc_types.NODE_CONST_NOROLE))[0]
+                nrel_author = client.resolve_keynodes(ScIdtfResolveParams(idtf="nrel_author", type=sc_types.NODE_CONST_NOROLE))[0]
+                
+                # Получаем заголовок
+                title_template = ScTemplate()
+                title_template.triple(
+                    topic_addr,
+                    sc_types.EDGE_D_COMMON_VAR >> "_title_arc",
+                    sc_types.LINK_VAR >> "_title_link"
+                )
+                title_template.triple(
+                    nrel_topic_title,
+                    sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                    "_title_arc"
+                )
+                
+                title_result = client.template_search(title_template)
+                title = ""
+                if title_result:
+                    title_link = title_result[0].get("_title_link")
+                    title = client.get_link_content(title_link)[0].data
+                
+                # Получаем описание
+                desc_template = ScTemplate()
+                desc_template.triple(
+                    topic_addr,
+                    sc_types.EDGE_D_COMMON_VAR >> "_desc_arc",
+                    sc_types.LINK_VAR >> "_desc_link"
+                )
+                desc_template.triple(
+                    nrel_topic_description,
+                    sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                    "_desc_arc"
+                )
+                
+                desc_result = client.template_search(desc_template)
+                description = ""
+                if desc_result:
+                    desc_link = desc_result[0].get("_desc_link")
+                    description = client.get_link_content(desc_link)[0].data
+                
+                # Получаем автора
+                author_template = ScTemplate()
+                author_template.triple(
+                    topic_addr,
+                    sc_types.EDGE_D_COMMON_VAR >> "_author_arc",
+                    sc_types.NODE_VAR >> "_author"
+                )
+                author_template.triple(
+                    nrel_author,
+                    sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                    "_author_arc"
+                )
+                
+                author_result = client.template_search(author_template)
+                author_display = "Unknown"
+                if author_result:
+                    author_addr = author_result[0].get("_author")
+                    author_display = self.format_user_display(author_addr)
+                
+                return {
+                    'title': title,
+                    'description': description,
+                    'author': author_display
+                }
+                
+            except Exception as e:
+                print(f"Error getting topic details: {e}")
+                return {
+                    'title': 'Unknown',
+                    'description': '',
+                    'author': 'Unknown'
+                }
+        else:
+            raise ScServerError()
+    
+    
+    def get_topic_messages(self, topic_addr: ScAddr):
+        """Получает все сообщения топика"""
+        if is_connected():
+            try:
+                concept_message = client.resolve_keynodes(ScIdtfResolveParams(idtf="concept_message", type=sc_types.NODE_CONST_CLASS))[0]
+                nrel_message_content = client.resolve_keynodes(ScIdtfResolveParams(idtf="nrel_message_content", type=sc_types.NODE_CONST_NOROLE))[0]
+                nrel_message_author = client.resolve_keynodes(ScIdtfResolveParams(idtf="nrel_message_author", type=sc_types.NODE_CONST_NOROLE))[0]
+                
+                print(f"DEBUG: Looking for messages in topic {topic_addr}")
+                
+                # Шаблон: topic -> message
+                template = ScTemplate()
+                template.triple(
+                    topic_addr,
+                    sc_types.EDGE_ACCESS_VAR_POS_PERM >> "_msg_arc",
+                    sc_types.NODE_VAR >> "_message"
+                )
+                template.triple(
+                    concept_message,
+                    sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                    "_message"
+                )
+                
+                result = client.template_search(template)
+                print(f"DEBUG: Found {len(result)} messages")
+                messages = []
+                
+                for item in result:
+                    message_addr = item.get("_message")
+                    print(f"DEBUG: Processing message {message_addr}")
+                    
+                    # Получаем текст сообщения
+                    content_template = ScTemplate()
+                    content_template.triple(
+                        message_addr,
+                        sc_types.EDGE_D_COMMON_VAR >> "_content_arc",
+                        sc_types.LINK_VAR >> "_content_link"
+                    )
+                    content_template.triple(
+                        nrel_message_content,
+                        sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                        "_content_arc"
+                    )
+                    
+                    content_result = client.template_search(content_template)
+                    content = ""
+                    if content_result:
+                        content_link = content_result[0].get("_content_link")
+                        content = client.get_link_content(content_link)[0].data
+                        print(f"DEBUG: Message content: {content}")
+                    else:
+                        print(f"DEBUG: No content found for message {message_addr}")
+                    
+                    # Получаем автора
+                    author_template = ScTemplate()
+                    author_template.triple(
+                        message_addr,
+                        sc_types.EDGE_D_COMMON_VAR >> "_author_arc",
+                        sc_types.NODE_VAR >> "_author"
+                    )
+                    author_template.triple(
+                        nrel_message_author,
+                        sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                        "_author_arc"
+                    )
+                    
+                    author_result = client.template_search(author_template)
+                    author_display = "Unknown"
+                    if author_result:
+                        author_addr = author_result[0].get("_author")
+                        author_display = self.format_user_display(author_addr)
+                        print(f"DEBUG: Message author: {author_display}")
+                    else:
+                        print(f"DEBUG: No author found for message {message_addr}")
+                    
+                    messages.append({
+                        'content': content,
+                        'author': author_display
+                    })
+                
+                print(f"DEBUG: Returning {len(messages)} messages")
+                return messages
+                
+            except Exception as e:
+                print(f"Error getting messages: {e}")
+                import traceback
+                traceback.print_exc()
+                return []
+        else:
+            raise ScServerError()
+
+    
+    
+    def format_user_display(self, user_addr: ScAddr):
+        """Форматирует отображение пользователя: email (тип, рейтинг для специалистов)"""
+        try:
+            nrel_system_identifier = client.resolve_keynodes(ScIdtfResolveParams(idtf="nrel_system_identifier", type=sc_types.NODE_CONST_NOROLE))[0]
+            concept_specialist = client.resolve_keynodes(ScIdtfResolveParams(idtf="concept_specialist", type=sc_types.NODE_CONST_CLASS))[0]
+            
+            # Получаем email
+            email_template = ScTemplate()
+            email_template.triple(
+                user_addr,
+                sc_types.EDGE_D_COMMON_VAR >> "_email_arc",
+                sc_types.LINK_VAR >> "_email_link"
+            )
+            email_template.triple(
+                nrel_system_identifier,
+                sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                "_email_arc"
+            )
+            
+            email_result = client.template_search(email_template)
+            email = "Unknown"
+            if email_result:
+                email_link = email_result[0].get("_email_link")
+                email = client.get_link_content(email_link)[0].data
+            
+            # Проверяем, является ли пользователь специалистом
+            specialist_template = ScTemplate()
+            specialist_template.triple(
+                concept_specialist,
+                sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                user_addr
+            )
+            
+            is_specialist = len(client.template_search(specialist_template)) > 0
+            
+            # Если специалист, получаем рейтинг
+            if is_specialist:
+                nrel_selected_answers = client.resolve_keynodes(ScIdtfResolveParams(idtf="nrel_selected_answers", type=sc_types.NODE_CONST_NOROLE))[0]
+                concept_correct_answer = client.resolve_keynodes(ScIdtfResolveParams(idtf="concept_correct_answer", type=sc_types.NODE_CONST_CLASS))[0]
+                
+                # Ищем все ответы пользователя
+                answers_template = ScTemplate()
+                answers_template.triple(
+                    user_addr,
+                    sc_types.EDGE_D_COMMON_VAR >> "_answers_arc",
+                    sc_types.NODE_VAR >> "_answers_set"
+                )
+                answers_template.triple(
+                    nrel_selected_answers,
+                    sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                    "_answers_arc"
+                )
+                answers_template.triple(
+                    "_answers_set",
+                    sc_types.EDGE_ACCESS_VAR_POS_PERM >> "_answer_arc",
+                    sc_types.NODE_VAR >> "_answer"
+                )
+                
+                answers_result = client.template_search(answers_template)
+                
+                total_answers = len(answers_result)
+                correct_count = 0
+                
+                # Подсчитываем правильные ответы
+                for answer_item in answers_result:
+                    answer_addr = answer_item.get("_answer")
+                    
+                    # Проверяем, является ли ответ правильным
+                    correct_template = ScTemplate()
+                    correct_template.triple(
+                        concept_correct_answer,
+                        sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                        answer_addr
+                    )
+                    
+                    if len(client.template_search(correct_template)) > 0:
+                        correct_count += 1
+                
+                rating = correct_count if total_answers > 0 else 0
+                return f"{email} (Специалист, рейтинг: {rating})"
+            else:
+                return f"{email} (Клиент)"
+                
+        except Exception as e:
+            print(f"Error formatting user display: {e}")
+            return "Unknown"
+
+        
 
 
 # ========== VERIFICATION AGENT ==========
@@ -1825,7 +2450,7 @@ class OstisTestAgent(TestAgent):
             return {"status": TestStatus.INVALID, "message": str(e)}
     
     def check_answer(self, username: str, question_addr):
-        """Вызывает CheckTheAnswerAgent"""
+        """CheckTheAnswerAgent"""
         try:
             global payload
             payload = None
@@ -1836,18 +2461,15 @@ class OstisTestAgent(TestAgent):
                 question_addr=question_addr
             )
             
-            if agent_response and agent_response.get('message') == result.SUCCESS:
-                # TODO: распарсить результат проверки
-                return {
-                    "status": TestStatus.VALID, 
-                    "is_correct": True,
-                    "score": 1
-                }
+            if agent_response and agent_response.get("message") == result.SUCCESS:
+                is_correct = agent_response.get("is_correct", False)
+                return {"status": TestStatus.VALID, "is_correct": is_correct}
+            
             return {"status": TestStatus.INVALID, "message": "Failed to check answer"}
         except Exception as e:
             print(f"Error in check_answer: {e}")
             return {"status": TestStatus.INVALID, "message": str(e)}
-    
+        
     def delete_old_test_data(self, username: str):
         """Вызывает DeleteOldNodesAgent"""
         try:
@@ -1869,7 +2491,7 @@ class OstisTestAgent(TestAgent):
 
     
     def update_rating(self, username: str):
-        """Вызывает RatingUpdateAgent"""
+        """RatingUpdateAgent"""
         try:
             global payload
             payload = None
@@ -1879,13 +2501,17 @@ class OstisTestAgent(TestAgent):
                 username=username
             )
             
-            if agent_response and agent_response.get('message') == result.SUCCESS:
-                # TODO: получить рейтинг из результата
-                return {
-                    "status": TestStatus.VALID, 
-                    "rating": 0
-                }
+            print(f"DEBUG: agent_response = {agent_response}")
+            
+            if agent_response and agent_response.get("message") == result.SUCCESS:
+                # Извлекаем рейтинг из ответа
+                rating = agent_response.get("rating", 0)
+                print(f"DEBUG: Rating extracted = {rating}")
+                return {"status": TestStatus.VALID, "rating": rating}
+            
             return {"status": TestStatus.INVALID, "message": "Failed to update rating"}
         except Exception as e:
             print(f"Error in update_rating: {e}")
+            import traceback
+            traceback.print_exc()
             return {"status": TestStatus.INVALID, "message": str(e)}

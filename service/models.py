@@ -6,6 +6,8 @@ from sc_client.client import get_link_content, search_by_template
 from sc_client.models import ScTemplate, ScAddr, ScIdtfResolveParams
 from sc_client.constants import sc_types
 from sc_kpm import ScKeynodes
+import sc_client.client as client
+
 
 @dataclass
 class DirectoryResponse:
@@ -82,9 +84,9 @@ def find_user_by_username(username: str) -> Optional[User]:
         # ИМПОРТ ВНУТРИ ФУНКЦИИ - избегаем циклического импорта
         import sc_client.client as client
         
-        # Резолвим необходимые keynodes
-        nrel_email = client.resolve_keynodes(
-            ScIdtfResolveParams(idtf='nrel_email', type=sc_types.NODE_CONST_NOROLE)
+        # ИЗМЕНЕНО: Используем nrel_system_identifier вместо nrel_email
+        nrel_system_identifier = client.resolve_keynodes(
+            ScIdtfResolveParams(idtf='nrel_system_identifier', type=sc_types.NODE_CONST_NOROLE)
         )[0]
         
         concept_verified_user = client.resolve_keynodes(
@@ -101,19 +103,20 @@ def find_user_by_username(username: str) -> Optional[User]:
             sc_types.NODE_VAR >> 'user'
         )
         
-        # user -nrel_email-> email_link
+        # user -nrel_system_identifier-> email_link (ИЗМЕНЕНО)
         template.triple_with_relation(
             'user',
             sc_types.EDGE_D_COMMON_VAR,
             sc_types.LINK_VAR >> 'email',
             sc_types.EDGE_ACCESS_VAR_POS_PERM,
-            nrel_email
+            nrel_system_identifier  # ИЗМЕНЕНО
         )
         
         results = search_by_template(template)
         
         for result in results:
             email_content = get_link_content(result.get('email'))[0].data
+            
             if email_content == username:
                 # Создаем минимальный объект User для Flask-Login
                 user_addr = result.get('user')
@@ -136,6 +139,7 @@ def find_user_by_username(username: str) -> Optional[User]:
         import traceback
         traceback.print_exc()
         return None
+
 
 
 @login_manager.user_loader
@@ -225,19 +229,86 @@ def collect_user_info(user: ScAddr) -> User:
 
 def get_user_by_login(username: str) -> ScAddr:
     """
-    Получение ScAddr пользователя по логину (старая функция)
+    Получение ScAddr пользователя по логину (работает со старой и новой регистрацией)
     """
-    template = ScTemplate()
-    template.triple_with_relation(
-        sc_types.NODE_VAR >> 'user',
-        sc_types.EDGE_D_COMMON_VAR,
-        sc_types.LINK_VAR >> 'login',
-        sc_types.EDGE_ACCESS_VAR_POS_PERM,
-        ScKeynodes['nrel_user_login']
-    )
-    
-    results = search_by_template(template)
-    for result in results:
-        login_content = get_link_content(result.get('login'))[0].data
-        if login_content == username:
-            return result.get('user')
+    try:
+        from sc_client.models import ScIdtfResolveParams
+        from sc_client.constants import sc_types
+        
+        print(f"DEBUG get_user_by_login: searching for {username}")
+        
+        # Вариант 1: Новая регистрация (nrel_system_identifier)
+        try:
+            # Резолвим ключевые узлы
+            nrel_system_identifier = client.resolve_keynodes(
+                ScIdtfResolveParams(idtf="nrel_system_identifier", type=sc_types.NODE_CONST_NOROLE)
+            )[0]
+            
+            concept_user = client.resolve_keynodes(
+                ScIdtfResolveParams(idtf="concept_user", type=sc_types.NODE_CONST_CLASS)
+            )[0]
+            
+            template = ScTemplate()
+            
+            # user -> nrel_system_identifier -> login_link
+            template.quintuple(
+                sc_types.NODE_VAR >> 'user',
+                sc_types.EDGE_D_COMMON_VAR,
+                sc_types.LINK_VAR >> 'login_link',
+                sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                nrel_system_identifier
+            )
+            
+            # concept_user -> user
+            template.triple(
+                concept_user,
+                sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                'user'
+            )
+            
+            results = search_by_template(template)
+            
+            if results:
+                for result in results:
+                    login_link = result.get('login_link')
+                    login_content = get_link_content(login_link)[0].data
+                    
+                    if login_content == username:
+                        user_node = result.get('user')
+                        print(f"DEBUG: Found user (new registration): {user_node}")
+                        return user_node
+                        
+        except Exception as e:
+            print(f"DEBUG: New registration search failed: {e}")
+        
+        # Вариант 2: Старая регистрация (nrel_user_login)
+        try:
+            template = ScTemplate()
+            template.triple_with_relation(
+                sc_types.NODE_VAR >> 'user',
+                sc_types.EDGE_D_COMMON_VAR,
+                sc_types.LINK_VAR >> 'login',
+                sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                ScKeynodes['nrel_user_login']
+            )
+            
+            results = search_by_template(template)
+            for result in results:
+                login_content = get_link_content(result.get('login'))[0].data
+                if login_content == username:
+                    user_node = result.get('user')
+                    print(f"DEBUG: Found user (old registration): {user_node}")
+                    return user_node
+                    
+        except Exception as e:
+            print(f"DEBUG: Old registration search failed: {e}")
+        
+        print(f"DEBUG: User not found for username: {username}")
+        return None
+        
+    except Exception as e:
+        print(f"ERROR in get_user_by_login: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+

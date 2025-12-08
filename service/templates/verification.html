@@ -3,67 +3,63 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Подтверждение Email - Юридическая база</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles/verification.css') }}?v={{ range(1, 9999) | random }}">
+    <title>Подтверждение Email</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/verification.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div class="header">
-        <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Логотип" class="logo-header">
-        <div class="header-links">
-            <a href="{{ url_for('main.auth') }}" class="header-link">Вход</a>
-            <a href="{{ url_for('main.reg') }}" class="header-link">Регистрация</a>
-        </div>
-    </div>
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Logo" class="header-logo">
+        </header>
 
-    <div class="verification-container">
-        <div class="verification-box">
-            <div class="logo-container">
-                <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Логотип" class="logo">
-            </div>
-            
-            <h1>Подтверждение Email</h1>
-            
-            <p class="info-text">
-                Код подтверждения отправлен на:<br>
-                <strong>{{ email }}</strong>
-            </p>
-            
-            {% with messages = get_flashed_messages(with_categories=true) %}
-                {% if messages %}
-                    {% for category, message in messages %}
-                        <div class="alert alert-{{ category }}">{{ message }}</div>
-                    {% endfor %}
-                {% endif %}
-            {% endwith %}
-            
-            <form method="POST" action="{{ url_for('main.verification') }}">
-                {{ form.hidden_tag() }}
-                
-                <div style="display: none;">
-                    {{ form.email }}
-                </div>
-                
-                <div class="form-group">
-                    <label for="token">{{ form.token.label.text }}</label>
-                    {{ form.token(class="code-input", placeholder="000000", maxlength="6", autocomplete="off", autofocus=true, id="token") }}
-                </div>
-                
-                {{ form.submit(class="btn-primary") }}
-            </form>
-            
-            <div class="links">
-                <a href="{{ url_for('main.resend_code') }}" class="resend-link">
-                    Не получили код? Отправить повторно
-                </a>
-                <a href="{{ url_for('main.auth') }}" class="back-link">
-                    ← Вернуться к входу
-                </a>
-            </div>
-        </div>
-    </div>
+        <!-- Main Content -->
+        <main>
+            <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Logo" class="main-logo">
 
-    <div class="footer">
-        <p>&copy; 2025 OSTIS. Все права защищены.</p>
+            <div class="form-container">
+                <h2>Подтверждение Email</h2>
+                
+                <p class="info-text">
+                    Код подтверждения отправлен на:<br>
+                    <strong>{{ email }}</strong>
+                </p>
+
+                <!-- Flash Messages -->
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="alert alert-{{ category }}">
+                                {{ message }}
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+
+                <!-- Form -->
+                <form method="POST" action="">
+                    {{ form.hidden_tag() }}
+
+                    <div class="form-group">
+                        {{ form.token(class="form-control code-input", placeholder="000000", maxlength="6", autocomplete="off", autofocus=true, id="token") }}
+                    </div>
+
+                    {{ form.submit(class="btn-submit") }}
+                </form>
+
+                <!-- Links -->
+                <div class="form-footer">
+                    <p>Не получили код? <a href="{{ url_for('main.resend_code') }}">Отправить повторно</a></p>
+                    <p><a href="{{ url_for('main.auth') }}">← Вернуться к входу</a></p>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer>
+            <p>© 2025 OSTIS. Все права защищены.</p>
+        </footer>
     </div>
 </body>
 </html>

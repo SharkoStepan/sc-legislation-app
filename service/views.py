@@ -1,6 +1,9 @@
 from flask import Blueprint, request, render_template, redirect, url_for, flash, session
 from flask_login import login_user, logout_user, login_required, current_user
 from sc_client.client import get_link_content, search_by_template
+from sc_client.models import ScAddr, ScIdtfResolveParams, ScTemplate
+
+
 
 from .models import (
     find_user_by_username, 
@@ -33,6 +36,10 @@ from .services import (
 
 from .services import verification_send_token, verification_check_token
 from .forms import VerificationForm
+from service.agents.ostis import Ostis, result
+
+
+
 
 main = Blueprint("main", __name__)
 
@@ -372,11 +379,21 @@ def templates():
 # ============ TEST ROUTES ============
 
 def get_user_login_from_current_user():
-    """Получить строку логина из current_user"""
+    """Получает email текущего пользователя"""
+    # Если current_user.username это уже строка (email) - возвращаем её
+    if isinstance(current_user.username, str):
+        return current_user.username
+    
+    # Если это ScAddr - получаем email из SC-памяти
     from sc_client.client import get_link_content
-    link_content_list = get_link_content(current_user.username)
-    return link_content_list[0].data
-
+    from sc_client.models import ScAddr
+    
+    if isinstance(current_user.username, ScAddr):
+        link_content_list = get_link_content(current_user.username)
+        return link_content_list[0].data
+    
+    # Fallback
+    return str(current_user.username)
 
 @main.route("/test")
 @login_required
@@ -384,147 +401,147 @@ def test_page():
     """Страница с тестом"""
     return render_template("test.html")
 
-
-@main.route("/api/test/start", methods=["POST"])
+@main.route('/api/test/start', methods=['POST'])
 @login_required
 def test_start():
-    """API: Начать новый тест"""
-    user_login = get_user_login_from_current_user()
-    result = test_agent_delete_old_data(user_login)
-    
-    if result['status'] == 'valid':
-        return {"success": True, "message": "Тест начат"}
-    return {"success": False, "message": result.get('message', 'Ошибка')}, 400
+    """API для запуска теста"""
+    try:
+        # Получаем email пользователя
+        user_email = get_user_login_from_current_user()
+        
+        print(f"DEBUG: user_email = {user_email}")
+        
+        # Передаем email в агент
+        result = test_agent_delete_old_data(user_email)
+        
+        if result['status'] == 'valid':
+            return {'success': True, 'message': 'Тест запущен'}
+        return {'success': False, 'message': result.get('message', 'Ошибка')}, 400
+        
+    except Exception as e:
+        print(f"ERROR in test_start: {e}")
+        import traceback
+        traceback.print_exc()
+        return {'success': False, 'message': str(e)}, 500
 
-@main.route("/api/test/question", methods=["GET"])
+@main.route('/api/test/question', methods=['GET'])
 @login_required
 def test_get_question():
-    """API: Получить следующий вопрос"""
+    """API для получения вопроса"""
     try:
-        user_login = get_user_login_from_current_user()
-        result = test_agent_get_question(user_login)
-
+        user_email = get_user_login_from_current_user()
+        result = test_agent_get_question(user_email)
+        
         print(f"DEBUG test_get_question result: {result}")
-
+        
         if result['status'] == 'valid':
             question_addr = result.get('question_addr')
-
             if not question_addr:
-                return {"success": False, "message": "Вопрос не найден"}, 404
-
+                return {'success': False, 'message': 'Нет вопросов'}, 404
+            
             import sc_client.client as client
             from sc_client.models import ScIdtfResolveParams, ScTemplate
             from sc_client.constants import sc_types
-
-            # Ищем текст вопроса через nrel_content
+            
+            # Получаем nrel_content
             nrel_content = client.resolve_keynodes(
-                ScIdtfResolveParams(idtf='nrel_content', type=sc_types.NODE_CONST_NOROLE)
+                ScIdtfResolveParams(idtf="nrel_content", type=sc_types.NODE_CONST_NOROLE)
             )[0]
             
-            # Шаблон для поиска контента вопроса
+            # Шаблон для получения текста вопроса
             content_template = ScTemplate()
             content_template.quintuple(
                 question_addr,
                 sc_types.EDGE_D_COMMON_VAR,
-                sc_types.LINK_VAR >> "_content_link",
+                sc_types.LINK_VAR >> "content_link",
                 sc_types.EDGE_ACCESS_VAR_POS_PERM,
                 nrel_content
             )
             
             content_result = client.template_search(content_template)
+            question_text = str(question_addr.value)  # По умолчанию ID
             
-            question_text = str(question_addr.value)  # По умолчанию
             if content_result and len(content_result) > 0:
-                content_link = content_result[0].get("_content_link")
+                content_link = content_result[0].get("content_link")
                 content_data = client.get_link_content(content_link)
                 if content_data:
                     question_text = content_data[0].data
-
+            
             return {
-                "success": True,
-                "question": {
-                    "id": str(question_addr.value),
-                    "text": question_text,
-                    "addr": str(question_addr.value)
+                'success': True,
+                'question': {
+                    'id': str(question_addr.value),
+                    'text': question_text,
+                    'addr': str(question_addr.value)
                 }
             }, 200
         else:
-            return {"success": False, "message": result.get('message', 'Не удалось получить вопрос')}, 404
+            return {'success': False, 'message': result.get('message', 'Ошибка')}, 404
+            
     except Exception as e:
         print(f"ERROR in test_get_question: {e}")
         import traceback
         traceback.print_exc()
-        return {"success": False, "message": str(e)}, 500
+        return {'success': False, 'message': str(e)}, 500
 
-@main.route("/api/test/answer", methods=["POST"])
+@main.route('/api/test/answer', methods=['POST'])
 @login_required
 def test_save_answer():
-    """API: Сохранить ответ пользователя"""
+    """API для сохранения ответа"""
     try:
         data = request.get_json()
         question_id = data.get('question_id')
         answer_id = data.get('answer_id')
-        
-        user_login = get_user_login_from_current_user()
-        
-        # Преобразуем answer_id в ScAddr
+        user_email = get_user_login_from_current_user()
+
         from sc_client.models import ScAddr
         answer_addr = ScAddr(int(answer_id))
-        
-        # Сохраняем ответ - передаём напрямую ScAddr
-        save_result = test_agent_save_answer(answer_addr, user_login)
+
+        # Сохраняем ответ
+        save_result = test_agent_save_answer(answer_addr, user_email)
         
         if save_result['status'] == 'valid':
-            # Проверяем правильность
             question_addr = ScAddr(int(question_id))
-            check_result = test_agent_check_answer(question_addr, user_login)
+            check_result = test_agent_check_answer(question_addr, user_email)
             
-            is_correct = check_result.get('status') == 'valid'
+            # ✅ ИСПРАВЛЕНО: Используем is_correct из результата
+            is_correct = check_result.get('is_correct', False)
+            print(f"DEBUG: Question {question_id}, is_correct = {is_correct}")
             
-            return {
-                "success": True,
-                "is_correct": is_correct
-            }, 200
+            return {'success': True, 'is_correct': is_correct}, 200
         else:
-            return {"success": False, "message": "Ошибка сохранения"}, 400
+            return {'success': False, 'message': 'Ошибка сохранения ответа'}, 400
     except Exception as e:
         print(f"Error in save_answer: {e}")
         import traceback
         traceback.print_exc()
-        return {"success": False, "message": str(e)}, 400
+        return {'success': False, 'message': str(e)}, 400
 
-
-@main.route("/api/test/rating", methods=["GET"])
+@main.route('/api/test/rating', methods=['GET'])
 @login_required
 def test_get_rating():
-    """API: Получить рейтинг"""
-    user_login = get_user_login_from_current_user()
-    result = test_agent_update_rating(user_login)
+    """API для получения рейтинга"""
+    user_email = get_user_login_from_current_user()
+    result = test_agent_update_rating(user_email)
     
     if result['status'] == 'valid':
-        return {
-            "success": True,
-            "rating": result.get('rating', 0)
-        }
-    
-    return {"success": False, "message": "Ошибка получения рейтинга"}, 400
+        return {'success': True, 'rating': result.get('rating', 0)}  # <- ИСПРАВЛЕНО
+    return {'success': False, 'message': 'Ошибка получения рейтинга'}, 400
 
-
-@main.route("/api/test/finish", methods=["POST"])
+@main.route('/api/test/finish', methods=['POST'])
 @login_required
 def test_finish():
-    """API: Завершить тест"""
-    user_login = get_user_login_from_current_user()
-    result = test_agent_update_rating(user_login)
+    """API для завершения теста"""
+    user_email = get_user_login_from_current_user()
+    result = test_agent_update_rating(user_email)
     
     if result['status'] == 'valid':
         return {
-            "success": True,
-            "rating": result.get('rating', 0),
-            "message": "Тест завершен!"
-        }
-    
-    return {"success": False, "message": "Ошибка завершения"}, 400
+            'success': True, 
+            'rating': result.get('rating', 0),
+            'message': 'Тест завершен!'
+        }, 200
+    return {'success': False, 'message': 'Ошибка завершения теста'}, 400
 
 @main.route("/api/test/answers/<question_id>", methods=["GET"])
 @login_required
@@ -588,30 +605,135 @@ def test_get_answers(question_id):
         traceback.print_exc()
         return {"success": False, "message": str(e)}, 500
     
+# ========== ФОРУМ ==========
+
 @main.route('/forum')
 @login_required
 def forum():
-    """Форум (в разработке)"""
-    flash('Форум в разработке. Скоро будет доступен!', 'warning')
-    return redirect(url_for('main.directory'))
+    """Главная страница форума - список топиков"""
+    try:
+        from .agents.ostis import Ostis
+        from config import Config
+        
+        ostis_instance = Ostis(Config.OSTIS_URL)
+        topics = ostis_instance.get_all_topics()
+        
+        return render_template('forum.html', topics=topics)
+    except Exception as e:
+        flash(f'Ошибка загрузки форума: {str(e)}', 'error')
+        return render_template('forum.html', topics=[])
 
-@main.route('/forum/create')
+
+@main.route('/forum/create_topic')
 @login_required
 def forum_create_topic():
-    """Создание темы (в разработке)"""
-    flash('Форум в разработке. Скоро будет доступен!', 'warning')
-    return redirect(url_for('main.directory'))
+    """Страница создания нового топика"""
+    return render_template('forum_create_topic.html')
 
-@main.route('/forum/topic/<int:topic_id>')
-@login_required
-def forum_topic(topic_id):
-    """Просмотр темы (в разработке)"""
-    flash('Форум в разработке. Скоро будет доступен!', 'warning')
-    return redirect(url_for('main.directory'))
 
-@main.route('/forum/reply/<int:topic_id>', methods=['POST'])
+@main.route('/forum/create_topic', methods=['POST'])
 @login_required
-def forum_reply(topic_id):
-    """Ответ на тему (в разработке)"""
-    flash('Форум в разработке. Скоро будет доступен!', 'warning')
-    return redirect(url_for('main.directory'))
+def forum_create_topic_post():
+    """Создание нового топика"""
+    try:
+        from .agents.ostis import Ostis, result
+        from config import Config
+        
+        title = request.form.get('title')
+        description = request.form.get('description')
+        
+        if not title or not description:
+            flash('Заполните все поля', 'error')
+            return redirect(url_for('main.forum_create_topic'))
+        
+        # ← ИСПРАВЛЕНО: используем готовую функцию
+        username = get_user_login_from_current_user()
+        if not username:
+            flash('Пользователь не авторизован', 'error')
+            return redirect(url_for('main.auth'))
+        
+        ostis_instance = Ostis(Config.OSTIS_URL)
+        response = ostis_instance.call_add_topic_agent(
+            action_name="action_add_topic",
+            username=username,
+            title=title,
+            description=description
+        )
+        
+        if response and response.get('message') == result.SUCCESS:
+            flash('Топик успешно создан!', 'success')
+            return redirect(url_for('main.forum'))
+        else:
+            flash('Ошибка создания топика', 'error')
+            return redirect(url_for('main.forum_create_topic'))
+            
+    except Exception as e:
+        flash(f'Ошибка: {str(e)}', 'error')
+        return redirect(url_for('main.forum_create_topic'))
+
+
+@main.route('/forum/topic/<int:topic_addr>')
+@login_required
+def forum_topic(topic_addr):
+    try:
+        from .agents.ostis import Ostis
+        from config import Config
+        
+        
+        topic_sc_addr = ScAddr(topic_addr)
+        ostis_instance = Ostis(Config.OSTIS_URL)
+        
+        topic_details = ostis_instance.get_topic_details(topic_sc_addr)
+        messages = ostis_instance.get_topic_messages(topic_sc_addr)
+        
+        return render_template(
+            'forum_topic.html',
+            topic=topic_details,
+            messages=messages,
+            topic_addr=topic_addr
+        )
+    except Exception as e:
+        flash(f'Ошибка загрузки топика: {str(e)}', 'error')
+        return redirect(url_for('main.forum'))
+
+@main.route('/forum/topic/<int:topic_addr>/add_message', methods=['POST'])
+@login_required
+def forum_add_message(topic_addr):
+    """Добавление сообщения в топик"""
+    try:
+        from .agents.ostis import Ostis, result
+        from config import Config
+        
+        
+        message_text = request.form.get('message')
+        
+        if not message_text:
+            flash('Сообщение не может быть пустым', 'error')
+            return redirect(url_for('main.forum_topic', topic_addr=topic_addr))
+        
+        # ← ИСПРАВЛЕНО: используем готовую функцию
+        username = get_user_login_from_current_user()
+        if not username:
+            flash('Пользователь не авторизован', 'error')
+            return redirect(url_for('main.auth'))
+        
+        topic_sc_addr = ScAddr(topic_addr)
+        
+        ostis_instance = Ostis(Config.OSTIS_URL)
+        response = ostis_instance.call_add_message_agent(
+            action_name="action_add_message",
+            username=username,
+            topic_addr=topic_sc_addr,
+            message_text=message_text
+        )
+        
+        if response and response.get('message') == result.SUCCESS:
+            flash('Сообщение добавлено!', 'success')
+        else:
+            flash('Ошибка добавления сообщения', 'error')
+            
+        return redirect(url_for('main.forum_topic', topic_addr=topic_addr))
+        
+    except Exception as e:
+        flash(f'Ошибка: {str(e)}', 'error')
+        return redirect(url_for('main.forum_topic', topic_addr=topic_addr))

@@ -42,7 +42,7 @@
                         {% for message in messages %}
                             <div class="message-card">
                                 <div class="message-author">{{ message.author }}</div>
-                                <div class="message-text">{{ message.text }}</div>
+                                <div class="message-text">{{ message.content }}</div>
                             </div>
                         {% endfor %}
                     {% else %}
@@ -63,7 +63,7 @@
                         {% endif %}
                     {% endwith %}
 
-                    <form method="POST" action="{{ url_for('main.forum_reply', topic_id=topic.id) }}">
+                    <form action="{{ url_for('main.forum_add_message', topic_addr=topic_addr) }}" method="POST">
                         <textarea name="message" class="form-control" rows="4" placeholder="Ваше сообщение..." required></textarea>
                         <button type="submit" class="btn-primary">Отправить</button>
                     </form>
