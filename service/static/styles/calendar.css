@@ -26,25 +26,29 @@ header {
     height: 80px;
     display: flex;
     align-items: center;
-    justify-content: space-between;
     padding: 0 40px;
 }
 
+/* Логотип слева */
 .header-logo {
     width: 120px;
     height: auto;
     cursor: pointer;
     transition: transform 0.2s;
+    margin-right: 40px;
 }
 
 .header-logo:hover {
     transform: scale(1.05);
 }
 
-/* Навигация */
-nav {
+/* Навигация по центру */
+header nav {
+    flex: 1;
     display: flex;
+    justify-content: center;
     gap: 10px;
+    align-items: center;
 }
 
 .nav-button {
@@ -67,25 +71,26 @@ nav {
     background-color: #FFFFFF;
 }
 
+/* Иконка пользователя справа */
 .user-icon {
     width: 48px;
     height: 48px;
     border-radius: 50%;
     cursor: pointer;
     transition: transform 0.2s;
+    margin-left: 40px;
 }
 
 .user-icon:hover {
     transform: scale(1.1);
 }
 
-/* Main */
-main {
-    flex: 1;
+/* Main layout */
+.main-content {
+    display: grid;
+    grid-template-columns: 2fr 1.3fr;
+    gap: 32px;
     padding: 40px;
-    max-width: 1200px;
-    margin: 0 auto;
-    width: 100%;
 }
 
 /* Calendar Header */
@@ -93,65 +98,122 @@ main {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 32px;
+    margin-bottom: 24px;
 }
 
-.calendar-header h1 {
-    font-size: 32px;
-    font-weight: 700;
+.month-navigation-container {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+}
+
+.month-navigation {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    font-size: 16px;
+    font-weight: 500;
+    color: #4D4FA3;
+}
+
+.month-title {
+    font-size: 20px;
+    font-weight: 600;
     color: #222349;
 }
 
-.btn-add-event {
-    background-color: #222349;
-    color: #FFFFFF;
-    border: none;
-    padding: 12px 24px;
-    border-radius: 10px;
-    font-size: 16px;
-    font-weight: 600;
+.month-arrow {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     cursor: pointer;
-    transition: background-color 0.3s ease;
+    user-select: none;
 }
 
-.btn-add-event:hover {
-    background-color: #4D4FA3;
+.month-arrow:hover {
+    text-decoration: underline;
 }
 
-/* Calendar Container */
-.calendar-container {
+.month-name {
+    font-size: 14px;
+}
+
+/* Calendar table */
+.calendar-section {
     background-color: #FFFFFF;
     border-radius: 16px;
     padding: 24px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-    margin-bottom: 32px;
-    min-height: 400px;
 }
 
-/* Events List */
-.events-list {
+.calendar-grid {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.calendar-grid th,
+.calendar-grid td {
+    width: 14.28%;
+    height: 64px;
+    text-align: center;
+}
+
+.calendar-grid th {
+    padding-bottom: 8px;
+}
+
+.calendar-day {
+    width: 100%;
+    height: 100%;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.calendar-grid td {
+    padding: 4px;
+}
+
+.calendar-grid td .calendar-day {
+    background-color: #F5F7FA;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.calendar-grid td:hover .calendar-day {
+    background-color: #E0E7FF;
+}
+
+.calendar-grid td.selected .calendar-day {
+    background-color: #222349;
+    color: #FFFFFF;
+}
+
+/* Events section */
+.events-section {
     background-color: #FFFFFF;
     border-radius: 16px;
-    padding: 32px;
+    padding: 24px 24px 32px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
 }
 
-.events-list h2 {
-    font-size: 24px;
+.events-title {
+    font-size: 20px;
     font-weight: 600;
     color: #222349;
-    margin-bottom: 24px;
 }
 
-/* Event Card */
-.event-card {
-    display: flex;
-    gap: 20px;
-    padding: 20px;
+.event-item {
+    padding: 16px 0;
     border-bottom: 1px solid #E5E7EB;
 }
 
-.event-card:last-child {
+.event-item:last-child {
     border-bottom: none;
 }
 
@@ -159,27 +221,135 @@ main {
     font-size: 14px;
     font-weight: 600;
     color: #4D4FA3;
-    min-width: 100px;
+    margin-bottom: 4px;
 }
 
-.event-details h3 {
-    font-size: 18px;
+.event-title {
+    font-size: 16px;
     font-weight: 600;
-    color: #222349;
+    margin-bottom: 4px;
+}
+
+.event-description {
+    font-size: 14px;
+    color: #6B7280;
     margin-bottom: 8px;
 }
 
-.event-details p {
-    font-size: 14px;
-    color: #6B7280;
-    line-height: 1.5;
-}
-
-.empty-events {
+.no-events {
     text-align: center;
     color: #6B7280;
-    padding: 40px;
-    font-size: 16px;
+    padding: 24px 0;
+    font-size: 14px;
+}
+
+.delete-button {
+    background-color: #F87171;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.delete-button:hover {
+    background-color: #EF4444;
+}
+
+.add-event-button {
+    margin-top: 8px;
+    align-self: flex-start;
+    background-color: #222349;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 10px;
+    padding: 10px 18px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.add-event-button:hover {
+    background-color: #4D4FA3;
+}
+
+/* Modal */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background-color: rgba(15, 23, 42, 0.4);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background-color: #FFFFFF;
+    border-radius: 16px;
+    padding: 24px 28px 20px;
+    width: 420px;
+    box-shadow: 0 20px 40px rgba(15, 23, 42, 0.2);
+}
+
+.modal-title {
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 16px;
+}
+
+.date-selection,
+.input-group {
+    margin-bottom: 12px;
+}
+
+.date-label,
+.input-label {
+    display: block;
+    font-size: 13px;
+    color: #4B5563;
+    margin-bottom: 4px;
+}
+
+.date-input,
+.event-name-input,
+.event-description-input {
+    width: 100%;
+    border-radius: 10px;
+    border: 1px solid #D1D5DB;
+    padding: 8px 10px;
+    font-size: 14px;
+    font-family: inherit;
+}
+
+.event-description-input {
+    min-height: 80px;
+    resize: vertical;
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 12px;
+}
+
+.save-button {
+    background-color: #222349;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 10px;
+    padding: 10px 18px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.save-button:hover {
+    background-color: #4D4FA3;
 }
 
 /* Footer */

@@ -228,15 +228,19 @@ def show_calendar():
     Метод для реализации эндпоинта календаря
     :return: Разметка страницы
     """
-    user = get_link_content(current_user.username)[0].data
+    # username уже строка-email, используем её напрямую
+    user = current_user.username
+
     selected_date = request.args.get("selected_date")
-    
     events = get_event_by_date(selected_date, user) if selected_date else []
-    
-    return render_template("calendar.html", 
-                         events=events.events if events else [],
-                         form=AddEventForm(),
-                         selected_date=selected_date)
+
+    return render_template(
+        "calendar.html",
+        events=events.events if events else [],
+        form=AddEventForm(),
+        selected_date=selected_date
+    )
+
 
 @main.route("/add_event", methods=["POST"])
 @login_required
@@ -520,13 +524,13 @@ def test_save_answer():
 @main.route('/api/test/rating', methods=['GET'])
 @login_required
 def test_get_rating():
-    """API для получения рейтинга"""
+    """API для получения ранга"""
     user_email = get_user_login_from_current_user()
     result = test_agent_update_rating(user_email)
-    
     if result['status'] == 'valid':
-        return {'success': True, 'rating': result.get('rating', 0)}  # <- ИСПРАВЛЕНО
-    return {'success': False, 'message': 'Ошибка получения рейтинга'}, 400
+        # Теперь возвращаем ранг (строка) вместо числового рейтинга
+        return {'success': True, 'rating': result.get('rating', 'первый ранг')}, 200
+    return {'success': False, 'message': 'Ошибка получения ранга'}, 400
 
 @main.route('/api/test/finish', methods=['POST'])
 @login_required
@@ -534,11 +538,10 @@ def test_finish():
     """API для завершения теста"""
     user_email = get_user_login_from_current_user()
     result = test_agent_update_rating(user_email)
-    
     if result['status'] == 'valid':
         return {
-            'success': True, 
-            'rating': result.get('rating', 0),
+            'success': True,
+            'rating': result.get('rating', 'первый ранг'),  # Теперь ранг - строка
             'message': 'Тест завершен!'
         }, 200
     return {'success': False, 'message': 'Ошибка завершения теста'}, 400

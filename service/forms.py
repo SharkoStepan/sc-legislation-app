@@ -79,3 +79,4 @@ class AddEventForm(FlaskForm):
     date = HiddenField('Дата', validators=[DataRequired()])
     title = StringField('Название', validators=[DataRequired()])
     description = TextAreaField('Описание')
+    submit = SubmitField('Добавить событие')

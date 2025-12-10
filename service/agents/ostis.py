@@ -382,7 +382,7 @@ def call_back_get_events(src: ScAddr, connector: ScAddr, trg: ScAddr) -> Enum:
 
 def callback_rating(src: ScAddr, connector: ScAddr, trg: ScAddr):
     """
-    Специальный callback для RatingUpdateAgent - извлекает рейтинг
+    Специальный callback для RatingUpdateAgent - извлекает РАНГ пользователя (строкой)
     """
     global payload
     callback_event.clear()
@@ -398,11 +398,11 @@ def callback_rating(src: ScAddr, connector: ScAddr, trg: ScAddr):
     )[0]
 
     if trg.value == succ_node.value:
-        # Извлекаем результат с рейтингом
+        # Извлекаем результат с рангом (строка)
         nrel_result = client.resolve_keynodes(
             ScIdtfResolveParams(idtf="nrel_result", type=sc_types.NODE_CONST_CLASS)
         )[0]
-        
+
         res_templ = ScTemplate()
         res_templ.triple_with_relation(
             src,
@@ -414,37 +414,38 @@ def callback_rating(src: ScAddr, connector: ScAddr, trg: ScAddr):
         res_templ.triple(
             "res_struct",
             sc_types.EDGE_ACCESS_VAR_POS_PERM,
-            sc_types.LINK_VAR >> "rating_link"
+            sc_types.LINK_VAR >> "rank_link"
         )
-        
-        genres = client.template_search(res_templ)
-        
-        if genres and len(genres) > 0:
+
+        results = client.template_search(res_templ)
+
+        if results and len(results) > 0:
             try:
-                rating_link = genres[0].get("rating_link")
-                rating_data = client.get_link_content(rating_link)
-                
-                if rating_data and len(rating_data) > 0:
-                    rating_value = int(rating_data[0].data)
-                    payload = {"message": result.SUCCESS, "rating": rating_value}
-                    print(f"DEBUG: Extracted rating = {rating_value}")
+                rank_link = results[0].get("rank_link")
+                rank_data = client.get_link_content(rank_link)
+
+                if rank_data and len(rank_data) > 0:
+                    # Берём строку «первый ранг / второй ранг / третий ранг»
+                    rank_str = str(rank_data[0].data)
+                    payload = {"message": result.SUCCESS, "rating": rank_str}
+                    print(f"DEBUG: Extracted rank = {rank_str}")
                 else:
-                    payload = {"message": result.SUCCESS, "rating": 0}
+                    payload = {"message": result.SUCCESS, "rating": "третий ранг"}
             except Exception as e:
-                print(f"Error extracting rating: {e}")
-                payload = {"message": result.SUCCESS, "rating": 0}
+                print(f"Error extracting rank: {e}")
+                payload = {"message": result.SUCCESS, "rating": "третий ранг"}
         else:
-            print("WARNING: No result structure found, returning rating=0")
-            payload = {"message": result.SUCCESS, "rating": 0}
-            
+            print("WARNING: No result structure found, returning default rank")
+            payload = {"message": result.SUCCESS, "rating": "третий ранг"}
+
     elif trg.value == unsucc_node.value or trg.value == node_err.value:
         payload = {"message": result.FAILURE}
 
     callback_event.set()
-    
+
     if not payload:
         return result.FAILURE
-    
+
     return result.SUCCESS
 
 def callback_check_answer(src: ScAddr, connector: ScAddr, trg: ScAddr):
@@ -1867,11 +1868,15 @@ class Ostis:
     
     
     def format_user_display(self, user_addr: ScAddr):
-        """Форматирует отображение пользователя: email (тип, рейтинг для специалистов)"""
+        """Форматирует отображение пользователя: email (тип, ранг для специалистов)"""
         try:
-            nrel_system_identifier = client.resolve_keynodes(ScIdtfResolveParams(idtf="nrel_system_identifier", type=sc_types.NODE_CONST_NOROLE))[0]
-            concept_specialist = client.resolve_keynodes(ScIdtfResolveParams(idtf="concept_specialist", type=sc_types.NODE_CONST_CLASS))[0]
-            
+            nrel_system_identifier = client.resolve_keynodes(
+                ScIdtfResolveParams(idtf="nrel_system_identifier", type=sc_types.NODE_CONST_NOROLE)
+            )[0]
+            concept_specialist = client.resolve_keynodes(
+                ScIdtfResolveParams(idtf="concept_specialist", type=sc_types.NODE_CONST_CLASS)
+            )[0]
+
             # Получаем email
             email_template = ScTemplate()
             email_template.triple(
@@ -1884,13 +1889,13 @@ class Ostis:
                 sc_types.EDGE_ACCESS_VAR_POS_PERM,
                 "_email_arc"
             )
-            
+
             email_result = client.template_search(email_template)
             email = "Unknown"
             if email_result:
                 email_link = email_result[0].get("_email_link")
                 email = client.get_link_content(email_link)[0].data
-            
+
             # Проверяем, является ли пользователь специалистом
             specialist_template = ScTemplate()
             specialist_template.triple(
@@ -1898,15 +1903,17 @@ class Ostis:
                 sc_types.EDGE_ACCESS_VAR_POS_PERM,
                 user_addr
             )
-            
             is_specialist = len(client.template_search(specialist_template)) > 0
-            
-            # Если специалист, получаем рейтинг
+
+            # Если специалист, считаем ответы и определяем ранг
             if is_specialist:
-                nrel_selected_answers = client.resolve_keynodes(ScIdtfResolveParams(idtf="nrel_selected_answers", type=sc_types.NODE_CONST_NOROLE))[0]
-                concept_correct_answer = client.resolve_keynodes(ScIdtfResolveParams(idtf="concept_correct_answer", type=sc_types.NODE_CONST_CLASS))[0]
-                
-                # Ищем все ответы пользователя
+                nrel_selected_answers = client.resolve_keynodes(
+                    ScIdtfResolveParams(idtf="nrel_selected_answers", type=sc_types.NODE_CONST_NOROLE)
+                )[0]
+                concept_correct_answer = client.resolve_keynodes(
+                    ScIdtfResolveParams(idtf="concept_correct_answer", type=sc_types.NODE_CONST_CLASS)
+                )[0]
+
                 answers_template = ScTemplate()
                 answers_template.triple(
                     user_addr,
@@ -1923,43 +1930,43 @@ class Ostis:
                     sc_types.EDGE_ACCESS_VAR_POS_PERM >> "_answer_arc",
                     sc_types.NODE_VAR >> "_answer"
                 )
-                
+
                 answers_result = client.template_search(answers_template)
-                
+
                 total_answers = len(answers_result)
                 correct_count = 0
-                
-                # Подсчитываем правильные ответы
+
                 for answer_item in answers_result:
                     answer_addr = answer_item.get("_answer")
-                    
-                    # Проверяем, является ли ответ правильным
+
                     correct_template = ScTemplate()
                     correct_template.triple(
                         concept_correct_answer,
                         sc_types.EDGE_ACCESS_VAR_POS_PERM,
                         answer_addr
                     )
-                    
+
                     if len(client.template_search(correct_template)) > 0:
                         correct_count += 1
-                
+
                 rating = correct_count if total_answers > 0 else 0
-                return f"{email} (Специалист, рейтинг: {rating})"
+
+                # Маппинг рейтинга в ранг
+                if rating >= 8:
+                    rank_str = "первый ранг"
+                elif rating >= 5:
+                    rank_str = "второй ранг"
+                else:
+                    rank_str = "третий ранг"
+
+                return f"{email} (Специалист, {rank_str})"
             else:
                 return f"{email} (Клиент)"
-                
+
         except Exception as e:
             print(f"Error formatting user display: {e}")
             return "Unknown"
-
-        
-
-
-# ========== VERIFICATION AGENT ==========
-
-
-
+    
 class OstisVerificationAgent(VerificationAgent):
     """
     Класс для реализации агента верификации через OSTIS
@@ -2491,24 +2498,24 @@ class OstisTestAgent(TestAgent):
 
     
     def update_rating(self, username: str):
-        """RatingUpdateAgent"""
+        """RatingUpdateAgent — теперь возвращает ранг"""
         try:
             global payload
             payload = None
-            
+
             agent_response = self.ostis.call_rating_update_agent(
                 action_name="action_update_rating",
                 username=username
             )
-            
+
             print(f"DEBUG: agent_response = {agent_response}")
-            
+
             if agent_response and agent_response.get("message") == result.SUCCESS:
-                # Извлекаем рейтинг из ответа
-                rating = agent_response.get("rating", 0)
-                print(f"DEBUG: Rating extracted = {rating}")
-                return {"status": TestStatus.VALID, "rating": rating}
-            
+                # Извлекаем ранг (строку) из ответа
+                rank = agent_response.get("rating", "третий ранг")
+                print(f"DEBUG: Rank extracted = {rank}")
+                return {"status": TestStatus.VALID, "rating": rank}
+
             return {"status": TestStatus.INVALID, "message": "Failed to update rating"}
         except Exception as e:
             print(f"Error in update_rating: {e}")
