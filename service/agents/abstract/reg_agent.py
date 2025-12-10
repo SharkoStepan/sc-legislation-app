@@ -1,38 +1,38 @@
-from abc import ABC, abstractmethod
-from enum import StrEnum
+from abc import ABC ,abstractmethod 
+from enum import StrEnum 
 
-class RegStatus(StrEnum):
+class RegStatus (StrEnum ):
     """
     Перечисление для представления статусов результата выполнения агента регистрации
     """
-    CREATED = "Valid"
-    EXISTS = "Invalid"
+    CREATED ="Valid"
+    EXISTS ="Invalid"
 
-class UserType(StrEnum):
+class UserType (StrEnum ):
     """
     Перечисление для представления типов пользователей
     """
-    CLIENT = "client"
-    SPECIALIST = "specialist"
+    CLIENT ="client"
+    SPECIALIST ="specialist"
 
-class RegAgent(ABC):
+class RegAgent (ABC ):
     """
     Абстрактный класс для реализации агента регистрации
     """
-    
-    @abstractmethod
-    def reg_agent(
-        self,
-        email: str,
-        password: str,
-        password_conf: str,
-        user_type: str,
-        full_name: str = None,
-        gender: str = None,
-        age: str = None,
-        experience: str = None,
-        field: str = None
-    ) -> dict:
+
+    @abstractmethod 
+    def reg_agent (
+    self ,
+    email :str ,
+    password :str ,
+    password_conf :str ,
+    user_type :str ,
+    full_name :str =None ,
+    gender :str =None ,
+    age :str =None ,
+    experience :str =None ,
+    field :str =None 
+    )->dict :
         """
         Абстрактный метод для запуска агента регистрации
         
@@ -47,4 +47,4 @@ class RegAgent(ABC):
         :param field: Сфера деятельности специалиста (только для specialist)
         :return: Словарь со статусом результата выполнения агента регистрации
         """
-        pass
+        pass 
