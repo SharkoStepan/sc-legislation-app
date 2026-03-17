@@ -675,29 +675,30 @@ def forum_create_topic_post ():
         return redirect (url_for ('main.forum_create_topic'))
 
 
-@main .route ('/forum/topic/<int:topic_addr>')
-@login_required 
-def forum_topic (topic_addr ):
-    try :
-        from .agents .ostis import Ostis 
-        from config import Config 
+@main.route('/forum/topic/<int:topic_addr>')
+@login_required
+def forum_topic(topic_addr):
+    try:
+        from .agents.ostis import Ostis
+        from config import Config
 
+        topic_sc_addr = ScAddr(topic_addr)
+        ostis_instance = Ostis(Config.OSTIS_URL)
+        topic_details = ostis_instance.get_topic_details(topic_sc_addr)
+        messages = ostis_instance.get_topic_messages(topic_sc_addr)
 
-        topic_sc_addr =ScAddr (topic_addr )
-        ostis_instance =Ostis (Config .OSTIS_URL )
+        # Передаём голоса текущего пользователя
+        user_votes = session.get('votes', {})
 
-        topic_details =ostis_instance .get_topic_details (topic_sc_addr )
-        messages =ostis_instance .get_topic_messages (topic_sc_addr )
-
-        return render_template (
-        'forum_topic.html',
-        topic =topic_details ,
-        messages =messages ,
-        topic_addr =topic_addr 
+        return render_template('forum_topic.html',
+            topic=topic_details,
+            messages=messages,
+            topic_addr=topic_addr,
+            user_votes=user_votes   # <-- добавили
         )
-    except Exception as e :
-        flash (f'Ошибка загрузки топика: {str (e )}','error')
-        return redirect (url_for ('main.forum'))
+    except Exception as e:
+        flash(f'Ошибка: {str(e)}', 'error')
+        return redirect(url_for('main.forum'))
 
 @main .route ('/forum/topic/<int:topic_addr>/add_message',methods =['POST'])
 @login_required 
@@ -740,3 +741,48 @@ def forum_add_message (topic_addr ):
     except Exception as e :
         flash (f'Ошибка: {str (e )}','error')
         return redirect (url_for ('main.forum_topic',topic_addr =topic_addr ))
+
+@main.route('/forum/topic/<int:topic_addr>/message/<int:message_addr>/rate', methods=['POST'])
+@login_required
+def forum_rate_message(topic_addr, message_addr):
+    try:
+        from .agents.ostis import Ostis
+        from config import Config
+
+        rating_type = request.form.get('rating_type')
+        print(f"DEBUG rate: topic={topic_addr}, message={message_addr}, type={rating_type}")
+
+        # Инициализируем хранилище голосов в сессии
+        if 'votes' not in session:
+            session['votes'] = {}
+
+        vote_key = str(message_addr)
+
+        # Проверяем — уже голосовал?
+        if vote_key in session['votes']:
+            return {'status': 'already_voted', 'voted': session['votes'][vote_key]}, 200
+
+        ostis_instance = Ostis(Config.OSTIS_URL)
+        response = ostis_instance.call_rate_message_agent(
+            action_name='action_rate_message',
+            message_addr=ScAddr(message_addr),
+            rating_type=rating_type
+        )
+
+        if response:
+            session['votes'][vote_key] = rating_type
+            session.modified = True
+            return {'status': 'ok'}, 200
+        else:
+            return {'status': 'error'}, 500
+
+    except Exception as e:
+        print(f"ERROR in forum_rate_message: {e}")
+        import traceback
+        traceback.print_exc()
+        return {'status': 'error', 'message': str(e)}, 500
+
+@main.route('/cabinet')
+@login_required
+def cabinet():
+    return render_template('cabinet.html', user=current_user)
