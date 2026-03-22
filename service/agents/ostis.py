@@ -515,6 +515,7 @@ def callback_check_answer (src :ScAddr ,connector :ScAddr ,trg :ScAddr ):
 
     return result .SUCCESS 
 
+
 class Ostis :
     """
     Класс для представления OSTIS-системы
@@ -1612,6 +1613,78 @@ class Ostis :
                 raise AgentError (524 ,"Timeout")
         else :
             raise ScServerError ()
+        
+    def call_rate_message_agent(self, action_name: str, message_addr: ScAddr, rating_type: str):
+        if is_connected():
+            rating_link = create_link(client, rating_type)
+            rrel1 = client.resolve_keynodes(ScIdtfResolveParams(idtf="rrel_1", type=sc_types.NODE_CONST_ROLE))[0]
+            rrel2 = client.resolve_keynodes(ScIdtfResolveParams(idtf="rrel_2", type=sc_types.NODE_CONST_ROLE))[0]
+            initiated_node = client.resolve_keynodes(ScIdtfResolveParams(idtf="action_initiated", type=sc_types.NODE_CONST_CLASS))[0]
+            action_agent = client.resolve_keynodes(ScIdtfResolveParams(idtf=action_name, type=sc_types.NODE_CONST_CLASS))[0]
+            main_node = get_node(client)
+
+            template = ScTemplate()
+            template.triple_with_relation(main_node, sc_types.EDGE_ACCESS_VAR_POS_PERM, message_addr, sc_types.EDGE_ACCESS_VAR_POS_PERM, rrel1)
+            template.triple_with_relation(main_node, sc_types.EDGE_ACCESS_VAR_POS_PERM, rating_link, sc_types.EDGE_ACCESS_VAR_POS_PERM, rrel2)
+            template.triple(action_agent, sc_types.EDGE_ACCESS_VAR_POS_PERM, main_node)
+            template.triple(initiated_node, sc_types.EDGE_ACCESS_VAR_POS_PERM, main_node)
+
+            event_params = ScEventSubscriptionParams(main_node, ScEventType.AFTER_GENERATE_INCOMING_ARC, call_back)
+            client.events_create(event_params)
+            client.template_generate(template)
+
+            global payload
+            payload = None
+            if callback_event.wait(timeout=10):
+                while not payload:
+                    continue
+                return payload
+            else:
+                raise AgentError(524, "Timeout")
+        else:
+            raise ScServerError
+        
+    def call_delete_message_agent(self, action_name: str, message_addr: ScAddr):
+        if is_connected():
+            rrel_1 = client.resolve_keynodes(
+                ScIdtfResolveParams(idtf="rrel_1", type=sc_types.NODE_CONST_ROLE)
+            )[0]
+            initiated_node = client.resolve_keynodes(
+                ScIdtfResolveParams(idtf="action_initiated", type=sc_types.NODE_CONST_CLASS)
+            )[0]
+            action_agent = client.resolve_keynodes(
+                ScIdtfResolveParams(idtf=action_name, type=sc_types.NODE_CONST_CLASS)
+            )[0]
+
+            main_node = get_node(client)
+
+            template = ScTemplate()
+            template.triple_with_relation(
+                main_node, sc_types.EDGE_ACCESS_VAR_POS_PERM, message_addr,
+                sc_types.EDGE_ACCESS_VAR_POS_PERM, rrel_1
+            )
+            template.triple(action_agent, sc_types.EDGE_ACCESS_VAR_POS_PERM, main_node)
+            template.triple(initiated_node, sc_types.EDGE_ACCESS_VAR_POS_PERM, main_node)
+
+            global payload
+            payload = None
+            callback_event.clear()
+
+            event_params = ScEventSubscriptionParams(
+                main_node, ScEventType.AFTER_GENERATE_INCOMING_ARC, call_back  # <-- call_back, не callback
+            )
+            client.events_create(event_params)
+            client.template_generate(template)
+
+            if callback_event.wait(timeout=10):
+                while not payload:
+                    continue
+                return payload
+            else:
+                raise AgentError(524, "Timeout")
+        else:
+            raise ScServerError
+
 
 
     def get_all_topics (self ):
@@ -1849,10 +1922,52 @@ class Ostis :
                     else :
                         print (f"DEBUG: No author found for message {message_addr }")
 
-                    messages .append ({
-                    'content':content ,
-                    'author':author_display 
+                    # Получаем лайки
+                    likes = 0
+                    nrel_likes = client.resolve_keynodes(ScIdtfResolveParams(idtf="nrel_likes", type=sc_types.NODE_CONST_NOROLE))[0]
+                    likes_template = ScTemplate()
+                    likes_template.quintuple(
+                        message_addr,
+                        sc_types.EDGE_D_COMMON_VAR,
+                        sc_types.LINK_VAR >> "_likes_link",
+                        sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                        nrel_likes
+                    )
+                    likes_result = client.template_search(likes_template)
+                    if likes_result:
+                        likes_link = likes_result[0].get("_likes_link")
+                        try:
+                            likes = int(client.get_link_content(likes_link)[0].data)
+                        except:
+                            likes = 0
+
+                    # Получаем дизлайки
+                    dislikes = 0
+                    nrel_dislikes = client.resolve_keynodes(ScIdtfResolveParams(idtf="nrel_dislikes", type=sc_types.NODE_CONST_NOROLE))[0]
+                    dislikes_template = ScTemplate()
+                    dislikes_template.quintuple(
+                        message_addr,
+                        sc_types.EDGE_D_COMMON_VAR,
+                        sc_types.LINK_VAR >> "_dislikes_link",
+                        sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                        nrel_dislikes
+                    )
+                    dislikes_result = client.template_search(dislikes_template)
+                    if dislikes_result:
+                        dislikes_link = dislikes_result[0].get("_dislikes_link")
+                        try:
+                            dislikes = int(client.get_link_content(dislikes_link)[0].data)
+                        except:
+                            dislikes = 0
+
+                    messages.append({
+                        'content': content,
+                        'author': author_display,
+                        'addr': message_addr.value,
+                        'likes': likes,
+                        'dislikes': dislikes
                     })
+
 
                 print (f"DEBUG: Returning {len (messages )} messages")
                 return messages 
@@ -2522,3 +2637,22 @@ class OstisTestAgent (TestAgent ):
             import traceback 
             traceback .print_exc ()
             return {"status":TestStatus .INVALID ,"message":str (e )}
+
+class OstisDeleteMessageAgent:
+    def __init__(self):
+        self.ostis = Ostis(Config.OSTIS_URL)
+
+    def delete_message_agent(self, message_addr: ScAddr) -> dict:
+        try:
+            global payload
+            payload = None
+            agent_response = self.ostis.call_delete_message_agent(
+                action_name="action_delete_message",
+                message_addr=message_addr
+            )
+            if agent_response and agent_response.get("message") == result.SUCCESS:
+                return {"status": "valid"}
+            return {"status": "error", "message": "Agent failed"}
+        except Exception as e:
+            print(f"Error in delete_message_agent: {e}")
+            return {"status": "error", "message": str(e)}

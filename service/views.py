@@ -2,6 +2,8 @@ from flask import Blueprint ,request ,render_template ,redirect ,url_for ,flash 
 from flask_login import login_user ,logout_user ,login_required ,current_user 
 from sc_client .client import get_link_content ,search_by_template 
 from sc_client .models import ScAddr ,ScIdtfResolveParams ,ScTemplate 
+from service.agents.ostis import OstisDeleteMessageAgent
+
 
 
 
@@ -786,3 +788,32 @@ def forum_rate_message(topic_addr, message_addr):
 @login_required
 def cabinet():
     return render_template('cabinet.html', user=current_user)
+
+@main.route('/api/forum/delete_message', methods=['POST'])
+@login_required
+def delete_message():
+    try:
+        data = request.get_json()
+        message_addr = data.get('message_addr')
+
+        if not message_addr:
+            return {'success': False, 'message': 'Не указан message_addr'}, 400
+
+        from .agents.ostis import Ostis
+        from config import Config
+
+        ostis_instance = Ostis(Config.OSTIS_URL)
+        response = ostis_instance.call_delete_message_agent(
+            action_name="action_delete_message",
+            message_addr=ScAddr(int(message_addr))
+        )
+
+        if response and response.get('message') == result.SUCCESS:
+            return {'success': True}, 200
+        return {'success': False, 'message': 'Агент вернул FAILURE'}, 500
+
+    except Exception as e:
+        print(f"ERROR delete_message: {e}")
+        import traceback
+        traceback.print_exc()
+        return {'success': False, 'message': str(e)}, 500
