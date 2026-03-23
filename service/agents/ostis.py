@@ -1685,6 +1685,36 @@ class Ostis :
         else:
             raise ScServerError
 
+    def get_topic_messages_sorted(self, topic_addr: ScAddr, sort_type: str = 'by_date'):
+        """
+        Получает сообщения топика с сортировкой и выделением лучшего.
+        sort_type: 'by_date' | 'by_rating' | 'by_relevance'
+        """
+        messages = self.get_topic_messages(topic_addr)
+
+        if sort_type == 'by_rating':
+            messages.sort(key=lambda m: m.get('likes', 0) - m.get('dislikes', 0), reverse=True)
+        elif sort_type == 'by_date':
+            # Порядок из sc-памяти считается хронологическим (как сейчас)
+            pass
+        elif sort_type == 'by_relevance':
+            # Комбинированная: сначала по рейтингу, потом по дате
+            messages.sort(key=lambda m: m.get('likes', 0) - m.get('dislikes', 0), reverse=True)
+
+        # Определяем лучшее сообщение (максимальный рейтинг)
+        best_message_addr = None
+        if messages:
+            best = max(messages, key=lambda m: m.get('likes', 0) - m.get('dislikes', 0))
+            if best.get('likes', 0) - best.get('dislikes', 0) > 0:
+                best_message_addr = best['addr']
+                # Если сортировка не by_rating — переставляем лучшее в начало
+                if sort_type == 'by_date':
+                    messages = [best] + [m for m in messages if m['addr'] != best_message_addr]
+
+        return {
+            'messages': messages,
+            'best_message_addr': best_message_addr
+        }
 
 
     def get_all_topics (self ):

@@ -35,12 +35,33 @@
             </div>
 
             <div class="messages-section">
-                <h2>Сообщения ({{ messages|length }})</h2>
+                <div class="messages-header">
+                    <h2>Сообщения ({{ messages|length }})</h2>
+
+                    <!-- Переключатель сортировки -->
+                    <div class="sort-controls">
+                        <span class="sort-label">Сортировка:</span>
+                        <a href="?sort_type=by_date"
+                           class="sort-btn {% if current_sort == 'by_date' or not current_sort %}active{% endif %}">
+                            По дате
+                        </a>
+                        <a href="?sort_type=by_rating"
+                           class="sort-btn {% if current_sort == 'by_rating' %}active{% endif %}">
+                            По рейтингу
+                        </a>
+                    </div>
+                </div>
 
                 <div class="messages-list">
                     {% if messages %}
                         {% for message in messages %}
-                            <div class="message-card" id="message-{{ message.addr }}">
+                            <div class="message-card {% if message.addr == best_message_addr %}best-message{% endif %}"
+                                 id="message-{{ message.addr }}">
+
+                                {% if message.addr == best_message_addr %}
+                                    <div class="best-badge">⭐ Лучший ответ</div>
+                                {% endif %}
+
                                 <div class="message-author">{{ message.author }}</div>
                                 <div class="message-text">{{ message.content }}</div>
                                 <div class="message-rating">

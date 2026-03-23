@@ -684,23 +684,45 @@ def forum_topic(topic_addr):
         from .agents.ostis import Ostis
         from config import Config
 
+        sort_type = request.args.get('sort_type', 'by_date')
+
         topic_sc_addr = ScAddr(topic_addr)
         ostis_instance = Ostis(Config.OSTIS_URL)
         topic_details = ostis_instance.get_topic_details(topic_sc_addr)
         messages = ostis_instance.get_topic_messages(topic_sc_addr)
 
-        # Передаём голоса текущего пользователя
+        # Сортировка и поиск лучшего сообщения
+        if sort_type == 'by_rating':
+            messages = sorted(
+                messages,
+                key=lambda m: m.get('likes', 0) - m.get('dislikes', 0),
+                reverse=True
+            )
+
+        # Лучшее сообщение — с максимальным рейтингом
+        best_message_addr = None
+        if messages:
+            best = max(messages, key=lambda m: m.get('likes', 0) - m.get('dislikes', 0))
+            if best.get('likes', 0) - best.get('dislikes', 0) > 0:
+                best_message_addr = best.get('addr')
+                # При сортировке by_date — закрепляем лучшее наверху
+                if sort_type == 'by_date':
+                    messages = [best] + [m for m in messages if m.get('addr') != best_message_addr]
+
         user_votes = session.get('votes', {})
 
         return render_template('forum_topic.html',
             topic=topic_details,
             messages=messages,
             topic_addr=topic_addr,
-            user_votes=user_votes   # <-- добавили
+            user_votes=user_votes,
+            current_sort=sort_type,
+            best_message_addr=best_message_addr
         )
     except Exception as e:
         flash(f'Ошибка: {str(e)}', 'error')
         return redirect(url_for('main.forum'))
+
 
 @main .route ('/forum/topic/<int:topic_addr>/add_message',methods =['POST'])
 @login_required 
@@ -817,3 +839,4 @@ def delete_message():
         import traceback
         traceback.print_exc()
         return {'success': False, 'message': str(e)}, 500
+

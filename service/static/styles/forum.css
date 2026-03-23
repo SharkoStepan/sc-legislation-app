@@ -470,3 +470,56 @@ footer p {
     background-color: #FEE;
     border-color: #C33;
 }
+
+.messages-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.sort-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.sort-label {
+    font-size: 14px;
+    color: #666;
+}
+
+.sort-btn {
+    padding: 5px 14px;
+    border-radius: 20px;
+    border: 1px solid #ccc;
+    text-decoration: none;
+    color: #333;
+    font-size: 13px;
+    transition: all 0.2s;
+}
+
+.sort-btn:hover {
+    border-color: #2563eb;
+    color: #2563eb;
+}
+
+.sort-btn.active {
+    background: #2563eb;
+    color: #fff;
+    border-color: #2563eb;
+}
+
+.message-card.best-message {
+    border: 2px solid #f0a500;
+    background: #fffbf0;
+}
+
+.best-badge {
+    font-size: 13px;
+    font-weight: 600;
+    color: #f0a500;
+    margin-bottom: 6px;
+}
