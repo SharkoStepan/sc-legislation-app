@@ -34,18 +34,63 @@
                 </div>
             </div>
 
+            <!-- Панель фильтров -->
+            <div class="filter-panel">
+                <form method="GET" action="" class="filter-form">
+                    <input type="hidden" name="sort_type" value="{{ current_sort }}">
+
+                    <div class="filter-group">
+                        <label class="filter-label">Автор:</label>
+                        <select name="filter_author" class="filter-select" onchange="this.form.submit()">
+                            <option value="">Все</option>
+                            {% for author in authors %}
+                                <option value="{{ author }}"
+                                    {% if filter_author == author %}selected{% endif %}>
+                                    {{ author }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="filter-group">
+                        <label class="filter-toggle">
+                            <input type="checkbox"
+                                   name="filter_best"
+                                   value="true"
+                                   {% if filter_best == 'true' %}checked{% endif %}
+                                   onchange="this.form.submit()">
+                            <span>Только лучшие</span>
+                        </label>
+                    </div>
+
+                    <div class="filter-group">
+                        <label class="filter-toggle">
+                            <input type="checkbox"
+                                   name="filter_experts"
+                                   value="true"
+                                   {% if filter_experts == 'true' %}checked{% endif %}
+                                   onchange="this.form.submit()">
+                            <span>Только эксперты</span>
+                        </label>
+                    </div>
+
+                    {% if filter_author or filter_best == 'true' or filter_experts == 'true' %}
+                        <a href="?sort_type={{ current_sort }}" class="filter-reset">✕ Сбросить</a>
+                    {% endif %}
+                </form>
+            </div>
+
             <div class="messages-section">
                 <div class="messages-header">
                     <h2>Сообщения ({{ messages|length }})</h2>
 
-                    <!-- Переключатель сортировки -->
                     <div class="sort-controls">
                         <span class="sort-label">Сортировка:</span>
-                        <a href="?sort_type=by_date"
+                        <a href="?sort_type=by_date&filter_author={{ filter_author }}&filter_best={{ filter_best }}&filter_experts={{ filter_experts }}"
                            class="sort-btn {% if current_sort == 'by_date' or not current_sort %}active{% endif %}">
                             По дате
                         </a>
-                        <a href="?sort_type=by_rating"
+                        <a href="?sort_type=by_rating&filter_author={{ filter_author }}&filter_best={{ filter_best }}&filter_experts={{ filter_experts }}"
                            class="sort-btn {% if current_sort == 'by_rating' %}active{% endif %}">
                             По рейтингу
                         </a>

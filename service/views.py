@@ -685,13 +685,30 @@ def forum_topic(topic_addr):
         from config import Config
 
         sort_type = request.args.get('sort_type', 'by_date')
+        filter_author = request.args.get('filter_author', '')        # фильтр по автору
+        filter_best = request.args.get('filter_best', 'false')       # только лучшие
+        filter_experts = request.args.get('filter_experts', 'false') # только эксперты
 
         topic_sc_addr = ScAddr(topic_addr)
         ostis_instance = Ostis(Config.OSTIS_URL)
         topic_details = ostis_instance.get_topic_details(topic_sc_addr)
         messages = ostis_instance.get_topic_messages(topic_sc_addr)
 
-        # Сортировка и поиск лучшего сообщения
+        # --- ФИЛЬТРАЦИЯ ---
+
+        # По автору
+        if filter_author:
+            messages = [m for m in messages if filter_author.lower() in m.get('author', '').lower()]
+
+        # Только лучшие (рейтинг > 0)
+        if filter_best == 'true':
+            messages = [m for m in messages if m.get('likes', 0) - m.get('dislikes', 0) > 0]
+
+        # Только от экспертов
+        if filter_experts == 'true':
+            messages = [m for m in messages if m.get('is_expert', False)]
+
+        # --- СОРТИРОВКА ---
         if sort_type == 'by_rating':
             messages = sorted(
                 messages,
@@ -699,15 +716,18 @@ def forum_topic(topic_addr):
                 reverse=True
             )
 
-        # Лучшее сообщение — с максимальным рейтингом
+        # Лучшее сообщение
         best_message_addr = None
         if messages:
             best = max(messages, key=lambda m: m.get('likes', 0) - m.get('dislikes', 0))
             if best.get('likes', 0) - best.get('dislikes', 0) > 0:
                 best_message_addr = best.get('addr')
-                # При сортировке by_date — закрепляем лучшее наверху
                 if sort_type == 'by_date':
                     messages = [best] + [m for m in messages if m.get('addr') != best_message_addr]
+
+        # Список уникальных авторов для выпадашки
+        all_messages = ostis_instance.get_topic_messages(topic_sc_addr)
+        authors = sorted(set(m.get('author', '') for m in all_messages if m.get('author')))
 
         user_votes = session.get('votes', {})
 
@@ -717,7 +737,11 @@ def forum_topic(topic_addr):
             topic_addr=topic_addr,
             user_votes=user_votes,
             current_sort=sort_type,
-            best_message_addr=best_message_addr
+            best_message_addr=best_message_addr,
+            filter_author=filter_author,
+            filter_best=filter_best,
+            filter_experts=filter_experts,
+            authors=authors
         )
     except Exception as e:
         flash(f'Ошибка: {str(e)}', 'error')
