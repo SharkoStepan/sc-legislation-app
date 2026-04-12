@@ -29,16 +29,13 @@
             <div class="topic-detail">
                 <h1>{{ topic.title }}</h1>
                 <p class="topic-meta">Автор: <strong>{{ topic.author }}</strong></p>
-                <div class="topic-description">
-                    {{ topic.description }}
-                </div>
+                <div class="topic-description">{{ topic.description }}</div>
             </div>
 
             <!-- Панель фильтров -->
             <div class="filter-panel">
                 <form method="GET" action="" class="filter-form">
                     <input type="hidden" name="sort_type" value="{{ current_sort }}">
-
                     <div class="filter-group">
                         <label class="filter-label">Автор:</label>
                         <select name="filter_author" class="filter-select" onchange="this.form.submit()">
@@ -51,7 +48,6 @@
                             {% endfor %}
                         </select>
                     </div>
-
                     <div class="filter-group">
                         <label class="filter-toggle">
                             <input type="checkbox"
@@ -62,7 +58,6 @@
                             <span>Только лучшие</span>
                         </label>
                     </div>
-
                     <div class="filter-group">
                         <label class="filter-toggle">
                             <input type="checkbox"
@@ -73,7 +68,6 @@
                             <span>Только эксперты</span>
                         </label>
                     </div>
-
                     {% if filter_author or filter_best == 'true' or filter_experts == 'true' %}
                         <a href="?sort_type={{ current_sort }}" class="filter-reset">✕ Сбросить</a>
                     {% endif %}
@@ -83,7 +77,6 @@
             <div class="messages-section">
                 <div class="messages-header">
                     <h2>Сообщения ({{ messages|length }})</h2>
-
                     <div class="sort-controls">
                         <span class="sort-label">Сортировка:</span>
                         <a href="?sort_type=by_date&filter_author={{ filter_author }}&filter_best={{ filter_best }}&filter_experts={{ filter_experts }}"
@@ -107,8 +100,21 @@
                                     <div class="best-badge">⭐ Лучший ответ</div>
                                 {% endif %}
 
+                                {% if message.get('is_expert') %}
+                                    <div class="expert-badge">⚖️ Эксперт</div>
+                                {% endif %}
+
                                 <div class="message-author">{{ message.author }}</div>
                                 <div class="message-text">{{ message.content }}</div>
+
+                                {% if message.image_base64 %}
+                                    <div class="message-image">
+                                        <img src="data:{{ message.image_mime }};base64,{{ message.image_base64 }}"
+                                             alt="Вложение"
+                                             onclick="openLightbox(this.src)">
+                                    </div>
+                                {% endif %}
+
                                 <div class="message-rating">
                                     <button class="rate-btn like-btn"
                                             data-message="{{ message.addr }}"
@@ -125,6 +131,7 @@
                                         👎 <span class="dislike-count">{{ message.dislikes }}</span>
                                     </button>
                                 </div>
+
                                 {% if current_user.username in message.author or message.author in current_user.username %}
                                     <button class="btn-delete"
                                             onclick="deleteMessage(this, '{{ message.addr }}')">
@@ -144,15 +151,59 @@
                     {% with messages = get_flashed_messages(with_categories=true) %}
                         {% if messages %}
                             {% for category, message in messages %}
-                                <div class="alert alert-{{ category }}">
-                                    {{ message }}
-                                </div>
+                                <div class="alert alert-{{ category }}">{{ message }}</div>
                             {% endfor %}
                         {% endif %}
                     {% endwith %}
 
-                    <form action="{{ url_for('main.forum_add_message', topic_addr=topic_addr) }}" method="POST">
-                        <textarea name="message" class="form-control" rows="4" placeholder="Ваше сообщение..." required></textarea>
+                    <form action="{{ url_for('main.forum_add_message', topic_addr=topic_addr) }}"
+                          method="POST"
+                          enctype="multipart/form-data">
+
+                        <!-- Скрытый file input -->
+                        <input type="file"
+                               id="imageInput"
+                               name="image"
+                               accept="image/*"
+                               style="display:none"
+                               onchange="handlePhotoSelect(this)">
+
+                        <div class="textarea-wrapper">
+
+                            <!-- Миниатюра прикреплённого фото — слева сверху -->
+                            <div class="attach-thumb" id="attachThumb">
+                                <img id="previewImg" src="" alt="Фото">
+                                <button type="button"
+                                        class="thumb-remove"
+                                        onclick="removePhoto()"
+                                        title="Убрать фото">✕</button>
+                            </div>
+
+                            <div class="autocomplete-wrapper">
+                                <div class="autocomplete-ghost" id="ghost" aria-hidden="true"></div>
+                                <textarea
+                                    name="message"
+                                    id="messageInput"
+                                    class="form-control"
+                                    rows="4"
+                                    placeholder="Ваше сообщение..."
+                                    required
+                                    autocomplete="off"
+                                    spellcheck="true"
+                                ></textarea>
+                            </div>
+
+                            <!-- Скрепка — справа сверху -->
+                            <button type="button"
+                                    class="attach-btn"
+                                    id="attachBtn"
+                                    title="Прикрепить фото"
+                                    onclick="document.getElementById('imageInput').click()">
+                                📎
+                            </button>
+                        </div>
+
+                        
                         <button type="submit" class="btn-primary">Отправить</button>
                     </form>
                 </div>
@@ -165,35 +216,211 @@
         </footer>
     </div>
 
+    <!-- Лайтбокс -->
+    <div class="lightbox" id="lightbox" onclick="closeLightbox()">
+        <span class="lightbox-close" onclick="closeLightbox()">×</span>
+        <img id="lightbox-img" src="" alt="Изображение">
+    </div>
+
+    <!-- Тексты сообщений топика -->
+    <script>
+        const TOPIC_MESSAGES = [
+            {% for message in messages %}
+                {{ message.content | tojson }}{% if not loop.last %},{% endif %}
+            {% endfor %}
+        ];
+        const TOPIC_META = {{ (topic.title ~ ' ' ~ topic.description) | tojson }};
+    </script>
+
+    <!-- Общий словарь русского языка -->
+    <script src="{{ url_for('static', filename='js/ru_words.js') }}"></script>
+
+    <!-- Автодополнение -->
+    <script>
+        function buildTopicDict(messages, topicMeta) {
+            const freq = {};
+            messages.forEach(text => {
+                const words = text.match(/[а-яёА-ЯЁa-zA-Z]{3,}/g) || [];
+                words.forEach(w => {
+                    const key = w.toLowerCase();
+                    freq[key] = (freq[key] || 0) + 10;
+                });
+            });
+            const metaWords = topicMeta.match(/[а-яёА-ЯЁa-zA-Z]{3,}/g) || [];
+            metaWords.forEach(w => {
+                const key = w.toLowerCase();
+                freq[key] = (freq[key] || 0) + 5;
+            });
+            return Object.entries(freq)
+                .sort((a, b) => b[1] - a[1])
+                .map(([word]) => word);
+        }
+
+        const topicWords  = buildTopicDict(TOPIC_MESSAGES, TOPIC_META);
+        const topicSet    = new Set(topicWords);
+        const globalWords = (typeof RU_WORDS !== 'undefined') ? RU_WORDS : [];
+        const WORDS       = [...topicWords, ...globalWords.filter(w => !topicSet.has(w))];
+
+        function getCurrentWord(text, cursorPos) {
+            const before = text.slice(0, cursorPos);
+            const match  = before.match(/[а-яёА-ЯЁa-zA-Z]+$/);
+            return match ? match[0] : '';
+        }
+
+        function getSuggestion(currentWord) {
+            if (currentWord.length < 2) return '';
+            const lower = currentWord.toLowerCase();
+            const match = WORDS.find(w => w.startsWith(lower) && w !== lower);
+            if (!match) return '';
+            if (currentWord[0] === currentWord[0].toUpperCase() &&
+                currentWord[0] !== currentWord[0].toLowerCase()) {
+                return match[0].toUpperCase() + match.slice(1);
+            }
+            return match;
+        }
+
+        function escapeHtml(str) {
+            return str
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/ /g, '&nbsp;')
+                .replace(/\n/g, '<br>');
+        }
+
+        const textarea = document.getElementById('messageInput');
+        const ghost    = document.getElementById('ghost');
+        let currentSuggestion = '';
+        let currentWordStart  = 0;
+
+        function syncGhostStyles() {
+            const cs = window.getComputedStyle(textarea);
+            [
+                'paddingTop', 'paddingBottom', 'paddingLeft', 'paddingRight',
+                'fontSize', 'fontFamily', 'fontWeight', 'lineHeight', 'letterSpacing',
+                'borderRadius',
+                'borderTopWidth', 'borderBottomWidth',
+                'borderLeftWidth', 'borderRightWidth',
+                'boxSizing', 'wordWrap', 'whiteSpace'
+            ].forEach(prop => { ghost.style[prop] = cs[prop]; });
+            ghost.style.width  = textarea.offsetWidth  + 'px';
+            ghost.style.height = textarea.offsetHeight + 'px';
+        }
+
+        function updateGhost() {
+            const text   = textarea.value;
+            const cursor = textarea.selectionStart;
+            const word   = getCurrentWord(text, cursor);
+            currentWordStart  = cursor - word.length;
+            currentSuggestion = getSuggestion(word);
+
+            if (currentSuggestion && word) {
+                const tail = currentSuggestion.slice(word.length);
+                ghost.innerHTML = escapeHtml(text.slice(0, cursor)) +
+                    '<span class="autocomplete-ghost-suggestion">' +
+                    escapeHtml(tail) + '</span>' +
+                    escapeHtml(text.slice(cursor));
+            } else {
+                ghost.innerHTML = escapeHtml(text);
+            }
+            ghost.scrollTop = textarea.scrollTop;
+        }
+
+        textarea.addEventListener('keydown', function(e) {
+            if (e.key === 'Tab' && currentSuggestion) {
+                e.preventDefault();
+                const text   = textarea.value;
+                const cursor = textarea.selectionStart;
+                const newText = text.slice(0, currentWordStart) +
+                                currentSuggestion + text.slice(cursor);
+                textarea.value = newText;
+                const newCursor = currentWordStart + currentSuggestion.length;
+                textarea.setSelectionRange(newCursor, newCursor);
+                currentSuggestion = '';
+                ghost.innerHTML   = escapeHtml(newText);
+            }
+            if (e.key === 'Escape') {
+                currentSuggestion = '';
+                ghost.innerHTML   = escapeHtml(textarea.value);
+            }
+        });
+
+        textarea.addEventListener('input',  updateGhost);
+        textarea.addEventListener('keyup',  updateGhost);
+        textarea.addEventListener('click',  updateGhost);
+        textarea.addEventListener('scroll', () => { ghost.scrollTop = textarea.scrollTop; });
+        window.addEventListener('load',   () => { syncGhostStyles(); updateGhost(); });
+        window.addEventListener('resize', () => { syncGhostStyles(); updateGhost(); });
+    </script>
+
+    <!-- Прикрепление фото -->
+    <script>
+        function handlePhotoSelect(input) {
+            if (!input.files || !input.files[0]) return;
+            const file   = input.files[0];
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                document.getElementById('previewImg').src = e.target.result;
+                document.getElementById('attachThumb').classList.add('visible');
+                document.getElementById('attachBtn').classList.add('has-photo');
+                document.getElementById('messageInput').style.paddingLeft = '76px';
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function removePhoto() {
+            document.getElementById('imageInput').value  = '';
+            document.getElementById('previewImg').src    = '';
+            document.getElementById('attachThumb').classList.remove('visible');
+            document.getElementById('attachBtn').classList.remove('has-photo');
+            document.getElementById('messageInput').style.paddingLeft = '';
+        }
+    </script>
+
+    <!-- Лайтбокс -->
+    <script>
+        function openLightbox(src) {
+            document.getElementById('lightbox-img').src = src;
+            document.getElementById('lightbox').classList.add('active');
+        }
+        function closeLightbox() {
+            document.getElementById('lightbox').classList.remove('active');
+            document.getElementById('lightbox-img').src = '';
+        }
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') closeLightbox();
+        });
+    </script>
+
+    <!-- Голосование -->
     <script>
         function applyVote(likeBtn, dislikeBtn, votedType) {
             if (votedType === 'like') {
                 dislikeBtn.dataset.voted = 'true';
-                likeBtn.dataset.voted = 'true';
+                likeBtn.dataset.voted    = 'true';
                 dislikeBtn.style.opacity = '0.4';
-                dislikeBtn.style.cursor = 'not-allowed';
-                dislikeBtn.style.filter = 'grayscale(100%)';
+                dislikeBtn.style.cursor  = 'not-allowed';
+                dislikeBtn.style.filter  = 'grayscale(100%)';
             } else if (votedType === 'dislike') {
-                likeBtn.dataset.voted = 'true';
+                likeBtn.dataset.voted    = 'true';
                 dislikeBtn.dataset.voted = 'true';
-                likeBtn.style.opacity = '0.4';
-                likeBtn.style.cursor = 'not-allowed';
-                likeBtn.style.filter = 'grayscale(100%)';
+                likeBtn.style.opacity    = '0.4';
+                likeBtn.style.cursor     = 'not-allowed';
+                likeBtn.style.filter     = 'grayscale(100%)';
             }
         }
 
         document.querySelectorAll('.message-rating').forEach(rating => {
-            const likeBtn = rating.querySelector('.like-btn');
+            const likeBtn    = rating.querySelector('.like-btn');
             const dislikeBtn = rating.querySelector('.dislike-btn');
 
-            const existingVote = likeBtn.dataset.voted;
-            if (existingVote && existingVote !== '') {
-                applyVote(likeBtn, dislikeBtn, existingVote);
+            if (likeBtn.dataset.voted && likeBtn.dataset.voted !== '') {
+                applyVote(likeBtn, dislikeBtn, likeBtn.dataset.voted);
             }
 
             async function sendRate(btn, oppositeBtn, ratingType, messageAddr, topicAddr) {
-                if (likeBtn.dataset.voted === 'true' || likeBtn.dataset.voted === 'like' || likeBtn.dataset.voted === 'dislike') return;
-
+                if (['true','like','dislike'].includes(likeBtn.dataset.voted)) return;
                 const response = await fetch(
                     `/forum/topic/${topicAddr}/message/${messageAddr}/rate`,
                     {
@@ -202,25 +429,29 @@
                         body: `rating_type=${ratingType}`
                     }
                 );
-
                 const data = await response.json();
-
                 if (response.ok && data.status === 'ok') {
-                    const span = btn.querySelector(ratingType === 'like' ? '.like-count' : '.dislike-count');
+                    const span = btn.querySelector(
+                        ratingType === 'like' ? '.like-count' : '.dislike-count'
+                    );
                     span.textContent = parseInt(span.textContent) + 1;
                     applyVote(likeBtn, dislikeBtn, ratingType);
                 }
             }
 
             likeBtn.addEventListener('click', function() {
-                sendRate(likeBtn, dislikeBtn, 'like', likeBtn.dataset.message, likeBtn.dataset.topic);
+                sendRate(likeBtn, dislikeBtn, 'like',
+                         likeBtn.dataset.message, likeBtn.dataset.topic);
             });
-
             dislikeBtn.addEventListener('click', function() {
-                sendRate(dislikeBtn, likeBtn, 'dislike', dislikeBtn.dataset.message, dislikeBtn.dataset.topic);
+                sendRate(dislikeBtn, likeBtn, 'dislike',
+                         dislikeBtn.dataset.message, dislikeBtn.dataset.topic);
             });
         });
+    </script>
 
+    <!-- Удаление -->
+    <script>
         async function deleteMessage(btn, messageAddr) {
             if (!confirm('Удалить сообщение?')) return;
             btn.disabled = true;

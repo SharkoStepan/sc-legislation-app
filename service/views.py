@@ -25,6 +25,7 @@ show_event_agent
 )
 
 from .forms import LoginForm ,RegistrationForm ,AddEventForm 
+from .agents.ostis import result
 
 from .services import (
 
@@ -685,30 +686,24 @@ def forum_topic(topic_addr):
         from config import Config
 
         sort_type = request.args.get('sort_type', 'by_date')
-        filter_author = request.args.get('filter_author', '')        # фильтр по автору
-        filter_best = request.args.get('filter_best', 'false')       # только лучшие
-        filter_experts = request.args.get('filter_experts', 'false') # только эксперты
+        filter_author = request.args.get('filter_author', '')
+        filter_best = request.args.get('filter_best', 'false')
+        filter_experts = request.args.get('filter_experts', 'false')
 
         topic_sc_addr = ScAddr(topic_addr)
         ostis_instance = Ostis(Config.OSTIS_URL)
         topic_details = ostis_instance.get_topic_details(topic_sc_addr)
         messages = ostis_instance.get_topic_messages(topic_sc_addr)
 
-        # --- ФИЛЬТРАЦИЯ ---
-
-        # По автору
+        # Фильтрация
         if filter_author:
             messages = [m for m in messages if filter_author.lower() in m.get('author', '').lower()]
-
-        # Только лучшие (рейтинг > 0)
         if filter_best == 'true':
             messages = [m for m in messages if m.get('likes', 0) - m.get('dislikes', 0) > 0]
-
-        # Только от экспертов
         if filter_experts == 'true':
             messages = [m for m in messages if m.get('is_expert', False)]
 
-        # --- СОРТИРОВКА ---
+        # Сортировка
         if sort_type == 'by_rating':
             messages = sorted(
                 messages,
@@ -725,7 +720,7 @@ def forum_topic(topic_addr):
                 if sort_type == 'by_date':
                     messages = [best] + [m for m in messages if m.get('addr') != best_message_addr]
 
-        # Список уникальных авторов для выпадашки
+        # Список авторов для фильтра
         all_messages = ostis_instance.get_topic_messages(topic_sc_addr)
         authors = sorted(set(m.get('author', '') for m in all_messages if m.get('author')))
 
@@ -743,52 +738,68 @@ def forum_topic(topic_addr):
             filter_experts=filter_experts,
             authors=authors
         )
+
     except Exception as e:
         flash(f'Ошибка: {str(e)}', 'error')
         return redirect(url_for('main.forum'))
 
 
-@main .route ('/forum/topic/<int:topic_addr>/add_message',methods =['POST'])
-@login_required 
-def forum_add_message (topic_addr ):
-    """Добавление сообщения в топик"""
-    try :
-        from .agents .ostis import Ostis ,result 
-        from config import Config 
+@main.route('/forum/topic/<int:topic_addr>/add_message', methods=['POST'])
+@login_required
+def forum_add_message(topic_addr):
+    import base64
+    try:
+        from .agents.ostis import Ostis, result
+        from config import Config
+        from .utils.profanity_filter import censor_text
 
+        message_text = request.form.get('message')
+        if not message_text:
+            flash('Сообщение не может быть пустым', 'error')
+            return redirect(url_for('main.forum_topic', topic_addr=topic_addr))
 
-        message_text =request .form .get ('message')
+        # Цензура
+        censored_text, was_censored = censor_text(message_text)
+        if was_censored:
+            flash('Некоторые слова в вашем сообщении были заменены согласно правилам форума.', 'warning')
 
-        if not message_text :
-            flash ('Сообщение не может быть пустым','error')
-            return redirect (url_for ('main.forum_topic',topic_addr =topic_addr ))
+        username = get_user_login_from_current_user()
+        if not username:
+            flash('Ошибка авторизации', 'error')
+            return redirect(url_for('main.auth'))
 
+        # Фото
+        image_base64 = None
+        image_name = None
+        image_mime = None
+        if 'image' in request.files:
+            file = request.files['image']
+            if file and file.filename:
+                image_name = file.filename
+                image_mime = file.mimetype
+                image_base64 = base64.b64encode(file.read()).decode('utf-8')
 
-        username =get_user_login_from_current_user ()
-        if not username :
-            flash ('Пользователь не авторизован','error')
-            return redirect (url_for ('main.auth'))
-
-        topic_sc_addr =ScAddr (topic_addr )
-
-        ostis_instance =Ostis (Config .OSTIS_URL )
-        response =ostis_instance .call_add_message_agent (
-        action_name ="action_add_message",
-        username =username ,
-        topic_addr =topic_sc_addr ,
-        message_text =message_text 
+        topic_sc_addr = ScAddr(topic_addr)
+        ostis_instance = Ostis(Config.OSTIS_URL)
+        response = ostis_instance.call_add_message_agent(
+            action_name='action_add_message',
+            username=username,
+            topic_addr=topic_sc_addr,
+            message_text=censored_text,
+            image_base64=image_base64,
+            image_name=image_name,
+            image_mime=image_mime
         )
 
-        if response and response .get ('message')==result .SUCCESS :
-            flash ('Сообщение добавлено!','success')
-        else :
-            flash ('Ошибка добавления сообщения','error')
+        if response and response.get('message') == result.SUCCESS:
+            flash('Сообщение добавлено!', 'success')
+        else:
+            flash('Ошибка при добавлении сообщения', 'error')
 
-        return redirect (url_for ('main.forum_topic',topic_addr =topic_addr ))
+    except Exception as e:
+        flash(f'Ошибка: {str(e)}', 'error')
 
-    except Exception as e :
-        flash (f'Ошибка: {str (e )}','error')
-        return redirect (url_for ('main.forum_topic',topic_addr =topic_addr ))
+    return redirect(url_for('main.forum_topic', topic_addr=topic_addr))
 
 @main.route('/forum/topic/<int:topic_addr>/message/<int:message_addr>/rate', methods=['POST'])
 @login_required
@@ -864,3 +875,22 @@ def delete_message():
         traceback.print_exc()
         return {'success': False, 'message': str(e)}, 500
 
+@main.route('/api/forum/search', methods=['GET'])
+@login_required
+def api_forum_search():
+    query = request.args.get('q', '').strip().lower()
+    if not query:
+        return {'results': []}
+
+    try:
+        from .agents.ostis import Ostis
+        from config import Config
+        ostis_instance = Ostis(Config.OSTIS_URL)
+        all_topics = ostis_instance.get_all_topics()  # уже возвращает addr, title, author
+        results = [
+            t for t in all_topics
+            if query in (t.get('title') or '').lower()
+        ]
+        return {'results': results}
+    except Exception as e:
+        return {'error': str(e), 'results': []}, 500
