@@ -1769,6 +1769,40 @@ class Ostis :
                 raise AgentError(524, "Timeout")
         else:
             raise ScServerError
+        
+    def call_edit_message_agent(self, action_name: str, message_addr: ScAddr, new_text: str):
+        if is_connected():
+            new_content_link = create_link(client, new_text)
+
+            rrel1 = client.resolve_keynodes(ScIdtfResolveParams(idtf="rrel_1", type=sc_types.NODE_CONST_ROLE))[0]
+            rrel2 = client.resolve_keynodes(ScIdtfResolveParams(idtf="rrel_2", type=sc_types.NODE_CONST_ROLE))[0]
+            initiated_node = client.resolve_keynodes(ScIdtfResolveParams(idtf="action_initiated", type=sc_types.NODE_CONST_CLASS))[0]
+            action_agent = client.resolve_keynodes(ScIdtfResolveParams(idtf=action_name, type=sc_types.NODE_CONST_CLASS))[0]
+            main_node = get_node(client)
+
+            template = ScTemplate()
+            template.triple_with_relation(main_node, sc_types.EDGE_ACCESS_VAR_POS_PERM, message_addr,
+                                        sc_types.EDGE_ACCESS_VAR_POS_PERM, rrel1)
+            template.triple_with_relation(main_node, sc_types.EDGE_ACCESS_VAR_POS_PERM, new_content_link,
+                                        sc_types.EDGE_ACCESS_VAR_POS_PERM, rrel2)
+            template.triple(action_agent, sc_types.EDGE_ACCESS_VAR_POS_PERM, main_node)
+            template.triple(initiated_node, sc_types.EDGE_ACCESS_VAR_POS_PERM, main_node)
+
+            global payload
+            payload = None
+            callback_event.clear()
+            event_params = ScEventSubscriptionParams(main_node, ScEventType.AFTER_GENERATE_INCOMING_ARC, call_back)
+            client.events_create(event_params)
+            client.template_generate(template)
+
+            if callback_event.wait(timeout=10):
+                while not payload:
+                    continue
+                return payload
+            else:
+                raise AgentError(524, "Timeout")
+        else:
+            raise ScServerError
 
     def get_topic_messages_sorted(self, topic_addr: ScAddr, sort_type: str = 'by_date'):
         """

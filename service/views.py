@@ -894,3 +894,34 @@ def api_forum_search():
         return {'results': results}
     except Exception as e:
         return {'error': str(e), 'results': []}, 500
+    
+@main.route('/api/forum/edit_message', methods=['POST'])
+@login_required
+def edit_message():
+    try:
+        data = request.get_json()
+        message_addr = data.get('message_addr')
+        new_text = data.get('new_text', '').strip()
+
+        if not message_addr or not new_text:
+            return {'success': False, 'message': 'Не указан message_addr или текст'}, 400
+
+        from .agents.ostis import Ostis
+        from config import Config
+
+        ostis_instance = Ostis(Config.OSTIS_URL)
+        response = ostis_instance.call_edit_message_agent(
+            action_name="action_edit_message",
+            message_addr=ScAddr(int(message_addr)),
+            new_text=new_text
+        )
+
+        if response and response.get('message') == result.SUCCESS:
+            return {'success': True}, 200
+        return {'success': False, 'message': 'Агент вернул FAILURE'}, 500
+
+    except Exception as e:
+        print(f"ERROR edit_message: {e}")
+        import traceback
+        traceback.print_exc()
+        return {'success': False, 'message': str(e)}, 500

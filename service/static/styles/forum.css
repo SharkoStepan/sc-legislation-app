@@ -947,3 +947,31 @@ mark.search-highlight {
 .attach-thumb .thumb-remove:hover {
     color: #e74c3c;
 }
+
+.message-card { position: relative; }
+
+.message-actions {
+    position: absolute;
+    bottom: 10px;
+    right: 12px;
+    display: flex;
+    flex-direction: row;
+    gap: 6px;
+    align-items: center;
+}
+
+.btn-icon {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px 5px;
+    border-radius: 6px;
+    font-size: 15px;
+    line-height: 1;
+    opacity: 0.45;
+    transition: opacity 0.15s, background 0.15s, transform 0.1s;
+}
+
+.btn-icon:hover            { opacity: 1; background: rgba(0,0,0,0.07); transform: scale(1.2); }
+.btn-icon.edit:hover       { color: #2563eb; }
+.btn-icon.delete:hover     { color: #dc2626; }
