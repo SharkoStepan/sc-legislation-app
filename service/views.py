@@ -26,6 +26,7 @@ show_event_agent
 )
 
 from .forms import LoginForm ,RegistrationForm ,AddEventForm 
+from .agents.ostis import result
 
 from .services import (
 
@@ -819,6 +820,11 @@ def forum_topic(topic_addr):
         from .agents.ostis import Ostis
         from config import Config
 
+        sort_type = request.args.get('sort_type', 'by_date')
+        filter_author = request.args.get('filter_author', '')
+        filter_best = request.args.get('filter_best', 'false')
+        filter_experts = request.args.get('filter_experts', 'false')
+
         topic_sc_addr = ScAddr(topic_addr)
         ostis_instance = Ostis(Config.OSTIS_URL)
 
@@ -887,6 +893,7 @@ def forum_topic(topic_addr):
             topic_tags=topic_tags,
             feedback_saved=feedback_saved
         )
+
     except Exception as e:
         flash(f'Ошибка: {str(e)}', 'error')
         return redirect(url_for('main.forum'))
@@ -932,47 +939,63 @@ def recommendation_feedback():
     
 
 
-@main .route ('/forum/topic/<int:topic_addr>/add_message',methods =['POST'])
-@login_required 
-def forum_add_message (topic_addr ):
-    """Добавление сообщения в топик"""
-    try :
-        from .agents .ostis import Ostis ,result 
-        from config import Config 
 
+@main.route('/forum/topic/<int:topic_addr>/add_message', methods=['POST'])
+@login_required
+def forum_add_message(topic_addr):
+    import base64
+    try:
+        from .agents.ostis import Ostis, result
+        from config import Config
+        from .utils.profanity_filter import censor_text
 
-        message_text =request .form .get ('message')
+        message_text = request.form.get('message')
+        if not message_text:
+            flash('Сообщение не может быть пустым', 'error')
+            return redirect(url_for('main.forum_topic', topic_addr=topic_addr))
 
-        if not message_text :
-            flash ('Сообщение не может быть пустым','error')
-            return redirect (url_for ('main.forum_topic',topic_addr =topic_addr ))
+        # Цензура
+        censored_text, was_censored = censor_text(message_text)
+        if was_censored:
+            flash('Некоторые слова в вашем сообщении были заменены согласно правилам форума.', 'warning')
 
+        username = get_user_login_from_current_user()
+        if not username:
+            flash('Ошибка авторизации', 'error')
+            return redirect(url_for('main.auth'))
 
-        username =get_user_login_from_current_user ()
-        if not username :
-            flash ('Пользователь не авторизован','error')
-            return redirect (url_for ('main.auth'))
+        # Фото
+        image_base64 = None
+        image_name = None
+        image_mime = None
+        if 'image' in request.files:
+            file = request.files['image']
+            if file and file.filename:
+                image_name = file.filename
+                image_mime = file.mimetype
+                image_base64 = base64.b64encode(file.read()).decode('utf-8')
 
-        topic_sc_addr =ScAddr (topic_addr )
-
-        ostis_instance =Ostis (Config .OSTIS_URL )
-        response =ostis_instance .call_add_message_agent (
-        action_name ="action_add_message",
-        username =username ,
-        topic_addr =topic_sc_addr ,
-        message_text =message_text 
+        topic_sc_addr = ScAddr(topic_addr)
+        ostis_instance = Ostis(Config.OSTIS_URL)
+        response = ostis_instance.call_add_message_agent(
+            action_name='action_add_message',
+            username=username,
+            topic_addr=topic_sc_addr,
+            message_text=censored_text,
+            image_base64=image_base64,
+            image_name=image_name,
+            image_mime=image_mime
         )
 
-        if response and response .get ('message')==result .SUCCESS :
-            flash ('Сообщение добавлено!','success')
-        else :
-            flash ('Ошибка добавления сообщения','error')
+        if response and response.get('message') == result.SUCCESS:
+            flash('Сообщение добавлено!', 'success')
+        else:
+            flash('Ошибка при добавлении сообщения', 'error')
 
-        return redirect (url_for ('main.forum_topic',topic_addr =topic_addr ))
+    except Exception as e:
+        flash(f'Ошибка: {str(e)}', 'error')
 
-    except Exception as e :
-        flash (f'Ошибка: {str (e )}','error')
-        return redirect (url_for ('main.forum_topic',topic_addr =topic_addr ))
+    return redirect(url_for('main.forum_topic', topic_addr=topic_addr))
 
 @main.route('/forum/topic/<int:topic_addr>/message/<int:message_addr>/rate', methods=['POST'])
 @login_required
@@ -1018,3 +1041,83 @@ def forum_rate_message(topic_addr, message_addr):
 @login_required
 def cabinet():
     return render_template('cabinet.html', user=current_user)
+
+@main.route('/api/forum/delete_message', methods=['POST'])
+@login_required
+def delete_message():
+    try:
+        data = request.get_json()
+        message_addr = data.get('message_addr')
+
+        if not message_addr:
+            return {'success': False, 'message': 'Не указан message_addr'}, 400
+
+        from .agents.ostis import Ostis
+        from config import Config
+
+        ostis_instance = Ostis(Config.OSTIS_URL)
+        response = ostis_instance.call_delete_message_agent(
+            action_name="action_delete_message",
+            message_addr=ScAddr(int(message_addr))
+        )
+
+        if response and response.get('message') == result.SUCCESS:
+            return {'success': True}, 200
+        return {'success': False, 'message': 'Агент вернул FAILURE'}, 500
+
+    except Exception as e:
+        print(f"ERROR delete_message: {e}")
+        import traceback
+        traceback.print_exc()
+        return {'success': False, 'message': str(e)}, 500
+
+@main.route('/api/forum/search', methods=['GET'])
+@login_required
+def api_forum_search():
+    query = request.args.get('q', '').strip().lower()
+    if not query:
+        return {'results': []}
+
+    try:
+        from .agents.ostis import Ostis
+        from config import Config
+        ostis_instance = Ostis(Config.OSTIS_URL)
+        all_topics = ostis_instance.get_all_topics()  # уже возвращает addr, title, author
+        results = [
+            t for t in all_topics
+            if query in (t.get('title') or '').lower()
+        ]
+        return {'results': results}
+    except Exception as e:
+        return {'error': str(e), 'results': []}, 500
+    
+@main.route('/api/forum/edit_message', methods=['POST'])
+@login_required
+def edit_message():
+    try:
+        data = request.get_json()
+        message_addr = data.get('message_addr')
+        new_text = data.get('new_text', '').strip()
+
+        if not message_addr or not new_text:
+            return {'success': False, 'message': 'Не указан message_addr или текст'}, 400
+
+        from .agents.ostis import Ostis
+        from config import Config
+
+        ostis_instance = Ostis(Config.OSTIS_URL)
+        response = ostis_instance.call_edit_message_agent(
+            action_name="action_edit_message",
+            message_addr=ScAddr(int(message_addr)),
+            new_text=new_text
+        )
+
+        if response and response.get('message') == result.SUCCESS:
+            return {'success': True}, 200
+        return {'success': False, 'message': 'Агент вернул FAILURE'}, 500
+
+    except Exception as e:
+        print(f"ERROR edit_message: {e}")
+        import traceback
+        traceback.print_exc()
+        return {'success': False, 'message': str(e)}, 500

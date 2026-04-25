@@ -210,5 +210,94 @@
             <p>Ostis 2025</p>
         </footer>
     </div>
+
+    <script>
+        const input = document.getElementById('forum-search-input');
+        const clearBtn = document.getElementById('forum-search-clear');
+        const status = document.getElementById('search-status');
+        const topicsContainer = document.getElementById('topics-container');
+        const searchResultsContainer = document.getElementById('search-results-container');
+        const noResults = document.getElementById('no-results');
+        const noResultsQuery = document.getElementById('no-results-query');
+
+        let debounceTimer = null;
+
+        function highlight(text, query) {
+            if (!query) return text;
+            const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            return text.replace(new RegExp(`(${escaped})`, 'gi'),
+                '<mark class="search-highlight">$1</mark>');
+        }
+
+        function showAllTopics() {
+            topicsContainer.style.display = '';
+            searchResultsContainer.style.display = 'none';
+            searchResultsContainer.innerHTML = '';
+            noResults.style.display = 'none';
+            status.textContent = '';
+            clearBtn.style.display = 'none';
+        }
+
+        function performSearch(query) {
+            if (!query.trim()) {
+                showAllTopics();
+                return;
+            }
+
+            clearBtn.style.display = 'block';
+            status.textContent = 'Поиск...';
+            status.className = 'search-status searching';
+
+            fetch(`/api/forum/search?q=${encodeURIComponent(query)}`)
+                .then(r => r.json())
+                .then(data => {
+                    topicsContainer.style.display = 'none';
+                    searchResultsContainer.innerHTML = '';
+
+                    if (data.results && data.results.length > 0) {
+                        noResults.style.display = 'none';
+                        searchResultsContainer.style.display = '';
+                        status.textContent = `Найдено: ${data.results.length}`;
+                        status.className = 'search-status found';
+
+                        data.results.forEach(topic => {
+                            const card = document.createElement('a');
+                            card.href = `/forum/topic/${topic.addr}`;
+                            card.className = 'topic-card';
+                            card.innerHTML = `
+                                <div class="topic-header">
+                                    <h3 class="topic-title-text">${highlight(topic.title, query)}</h3>
+                                </div>
+                                <p class="topic-author">Автор: ${topic.author || ''}</p>
+                            `;
+                            searchResultsContainer.appendChild(card);
+                        });
+                    } else {
+                        searchResultsContainer.style.display = 'none';
+                        noResults.style.display = '';
+                        noResultsQuery.textContent = query;
+                        status.textContent = 'Не найдено';
+                        status.className = 'search-status not-found';
+                    }
+                })
+                .catch(() => {
+                    status.textContent = 'Ошибка поиска';
+                    status.className = 'search-status error';
+                });
+        }
+
+        input.addEventListener('input', () => {
+            clearTimeout(debounceTimer);
+            const q = input.value.trim();
+            if (!q) { showAllTopics(); return; }
+            debounceTimer = setTimeout(() => performSearch(q), 400);
+        });
+
+        clearBtn.addEventListener('click', () => {
+            input.value = '';
+            showAllTopics();
+            input.focus();
+        });
+    </script>
 </body>
 </html>

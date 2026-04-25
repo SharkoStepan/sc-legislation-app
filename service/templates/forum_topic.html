@@ -77,12 +77,31 @@
             </div>
 
             <div class="messages-section">
-                <h2>Сообщения ({{ messages|length }})</h2>
+                <div class="messages-header">
+                    <h2>Сообщения ({{ messages|length }})</h2>
+                    <div class="sort-controls">
+                        <span class="sort-label">Сортировка:</span>
+                        <a href="?sort_type=by_date&filter_author={{ filter_author }}&filter_best={{ filter_best }}&filter_experts={{ filter_experts }}"
+                           class="sort-btn {% if current_sort == 'by_date' or not current_sort %}active{% endif %}">По дате</a>
+                        <a href="?sort_type=by_rating&filter_author={{ filter_author }}&filter_best={{ filter_best }}&filter_experts={{ filter_experts }}"
+                           class="sort-btn {% if current_sort == 'by_rating' %}active{% endif %}">По рейтингу</a>
+                    </div>
+                </div>
 
                 <div class="messages-list">
                     {% if messages %}
                         {% for message in messages %}
-                            <div class="message-card">
+                            <div class="message-card {% if message.addr == best_message_addr %}best-message{% endif %}"
+                                 id="message-{{ message.addr }}">
+
+                                {% if message.addr == best_message_addr %}
+                                    <div class="best-badge">⭐ Лучший ответ</div>
+                                {% endif %}
+
+                                {% if message.get('is_expert') %}
+                                    <div class="expert-badge">⚖️ Эксперт</div>
+                                {% endif %}
+
                                 <div class="message-author">{{ message.author }}</div>
                                 <div class="message-text">{{ message.content }}</div>
 
@@ -103,6 +122,19 @@
                                         👎 <span class="dislike-count">{{ message.dislikes }}</span>
                                     </button>
                                 </div>
+
+                                {% if current_user.username in message.author or message.author in current_user.username %}
+                                    <div class="message-actions"
+                                         data-addr="{{ message.addr }}"
+                                         data-content="{{ message.content | e }}">
+                                        <button type="button" class="btn-icon edit"
+                                                title="Редактировать"
+                                                onclick="startEdit(this)">✏️</button>
+                                        <button type="button" class="btn-icon delete"
+                                                title="Удалить"
+                                                onclick="deleteMessage(this)">🗑️</button>
+                                    </div>
+                                {% endif %}
                             </div>
                         {% endfor %}
                     {% else %}
@@ -116,9 +148,7 @@
                     {% with messages = get_flashed_messages(with_categories=true) %}
                         {% if messages %}
                             {% for category, message in messages %}
-                                <div class="alert alert-{{ category }}">
-                                    {{ message }}
-                                </div>
+                                <div class="alert alert-{{ category }}">{{ message }}</div>
                             {% endfor %}
                         {% endif %}
                     {% endwith %}
@@ -157,6 +187,11 @@
             <p>Персональный ассистент по юриспруденции</p>
             <p>Ostis 2025</p>
         </footer>
+    </div>
+
+    <div class="lightbox" id="lightbox" onclick="closeLightbox()">
+        <span class="lightbox-close" onclick="closeLightbox()">×</span>
+        <img id="lightbox-img" src="" alt="Изображение">
     </div>
 
     <script>
