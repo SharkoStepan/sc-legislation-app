@@ -7,9 +7,12 @@ from ..exceptions import ScServerError
 from sc_client .client import is_connected ,search_links_by_contents 
 from sc_client .models import (
 ScAddr ,
+ScConstruction ,
 ScEventSubscriptionParams ,
 ScIdtfResolveParams ,
-ScTemplate 
+ScLinkContent ,
+ScLinkContentType ,
+ScTemplate
 )
 from sc_client .constants .common import ScEventType 
 from sc_client .constants import sc_types 
@@ -39,8 +42,13 @@ get_main_idtf ,
 set_system_idtf 
 )
 from config import Config 
-from service .agents .abstract .test_agent import TestAgent ,TestStatus 
-from service .agents .abstract .verification_agent import VerificationAgent ,VerificationStatus 
+from service .agents .abstract .test_agent import TestAgent ,TestStatus
+from service .agents .abstract .verification_agent import VerificationAgent ,VerificationStatus
+from service.agents.abstract.profile_agent import ProfileAgent, ProfileStatus
+from service.agents.abstract.history_agent import HistoryAgent, HistoryStatus
+from service.agents.abstract.bookmarks_agent import BookmarksAgent, BookmarksStatus
+from service.agents.abstract.notes_agent import NotesAgent, NotesStatus
+from datetime import datetime 
 
 
 payload =None 
@@ -114,22 +122,21 @@ def call_back_request (src :ScAddr ,connector :ScAddr ,trg :ScAddr )->Enum :
     :param trg: Адрес ноды, которая показывает результат выполнения агента
     :return: Результат выполнения агента
     """
-    global payload 
-    callback_event .clear ()
+    global payload
+    # Only handle finish signals — ignore arcs created during template_generate
+    # (action_initiated, action class membership, etc.)
+    try:
+        succ_node  = client.resolve_keynodes(ScIdtfResolveParams(idtf='action_finished_successfully',  type=sc_types.NODE_CONST_CLASS))[0]
+        unsucc_node = client.resolve_keynodes(ScIdtfResolveParams(idtf='action_finished_unsuccessfully', type=sc_types.NODE_CONST_CLASS))[0]
+        node_err   = client.resolve_keynodes(ScIdtfResolveParams(idtf='action_finished_with_error',      type=sc_types.NODE_CONST_CLASS))[0]
+    except Exception:
+        return result.FAILURE
 
-    term :str 
-    content :str 
-    content_list =[]
+    # Not a finish signal — silently ignore, do NOT set callback_event
+    if trg.value not in (succ_node.value, unsucc_node.value, node_err.value):
+        return result.FAILURE
 
-    succ_node =client .resolve_keynodes (
-    ScIdtfResolveParams (idtf ='action_finished_successfully',type =sc_types .NODE_CONST_CLASS )
-    )[0 ]
-    unsucc_node =client .resolve_keynodes (
-    ScIdtfResolveParams (idtf ='action_finished_unsuccessfully',type =sc_types .NODE_CONST_CLASS )
-    )[0 ]
-    node_err =client .resolve_keynodes (
-    ScIdtfResolveParams (idtf ='action_finished_with_error',type =sc_types .NODE_CONST_CLASS )
-    )[0 ]
+    content_list = []
 
     if trg .value ==succ_node .value :
         nrel_result =client .resolve_keynodes (
@@ -225,14 +232,13 @@ def call_back_request (src :ScAddr ,connector :ScAddr ,trg :ScAddr )->Enum :
 
             content_list .append (response )
 
-        payload ={"message":content_list }
-    elif trg .value ==unsucc_node .value or trg .value ==node_err .value :
-        payload ={"message":"Nothing"}
+        payload = {"message": content_list}
+    elif trg.value == unsucc_node.value or trg.value == node_err.value:
+        payload = {"message": []}  # empty list, not string "Nothing"
 
-    callback_event .set ()
-    if not payload :
-        return result .FAILURE 
-    return result .SUCCESS 
+    # Signal waiting thread only after payload is set
+    callback_event.set()
+    return result.SUCCESS if payload else result.FAILURE
 
 def call_back_directory (src :ScAddr ,connector :ScAddr ,trg :ScAddr )->Enum :
     """
@@ -863,47 +869,43 @@ class Ostis :
         :raises AgentError: Возникает при истечении времени ожидания
         :raises ScServerError: Возникает при отсутствии запущенного sc-сервера
         """
-        if is_connected ():
-            request_lnk =create_link (client ,content )
+        if not is_connected():
+            return None
 
-            rrel_1 =client .resolve_keynodes (ScIdtfResolveParams (idtf ='rrel_1',type =sc_types .NODE_CONST_ROLE ))[0 ]
+        global payload
+        # Reset state BEFORE subscribing to avoid stale event from previous request
+        payload = None
+        callback_event.clear()
 
-            initiated_node =client .resolve_keynodes (ScIdtfResolveParams (idtf ='action_initiated',type =sc_types .NODE_CONST_CLASS ))[0 ]
-            action_agent =client .resolve_keynodes (ScIdtfResolveParams (idtf =action_name ,type =sc_types .NODE_CONST_CLASS ))[0 ]
-            main_node =get_node (client )
+        request_lnk   = create_link(client, content)
+        rrel_1         = client.resolve_keynodes(ScIdtfResolveParams(idtf='rrel_1',          type=sc_types.NODE_CONST_ROLE))[0]
+        initiated_node = client.resolve_keynodes(ScIdtfResolveParams(idtf='action_initiated', type=sc_types.NODE_CONST_CLASS))[0]
+        action_agent   = client.resolve_keynodes(ScIdtfResolveParams(idtf=action_name,        type=sc_types.NODE_CONST_CLASS))[0]
+        main_node      = get_node(client)
 
-            template =ScTemplate ()
-            template .triple_with_relation (
-            main_node >>"_main_node",
-            sc_types .EDGE_ACCESS_VAR_POS_PERM ,
-            request_lnk ,
-            sc_types .EDGE_ACCESS_VAR_POS_PERM ,
-            rrel_1 
-            )
-            template .triple (
-            action_agent ,
-            sc_types .EDGE_ACCESS_VAR_POS_PERM ,
-            "_main_node",
-            )
-            template .triple (
-            initiated_node ,
-            sc_types .EDGE_ACCESS_VAR_POS_PERM ,
-            "_main_node",
-            )
+        template = ScTemplate()
+        template.triple_with_relation(
+            main_node >> "_main_node",
+            sc_types.EDGE_ACCESS_VAR_POS_PERM,
+            request_lnk,
+            sc_types.EDGE_ACCESS_VAR_POS_PERM,
+            rrel_1,
+        )
+        template.triple(action_agent,   sc_types.EDGE_ACCESS_VAR_POS_PERM, "_main_node")
+        template.triple(initiated_node, sc_types.EDGE_ACCESS_VAR_POS_PERM, "_main_node")
 
-            event_params =ScEventSubscriptionParams (main_node ,ScEventType .AFTER_GENERATE_INCOMING_ARC ,call_back_request )
-            client .events_create (event_params )
-            client .template_generate (template )
+        event_params = ScEventSubscriptionParams(
+            main_node, ScEventType.AFTER_GENERATE_INCOMING_ARC, call_back_request
+        )
+        client.events_create(event_params)
+        client.template_generate(template)
 
-            global payload 
-            if callback_event .wait (timeout =10 ):
-                while not payload :
-                    continue 
-                return payload 
-            else :
-                raise AgentError (524 ,"Timeout")
-        else :
-            raise ScServerError 
+        # Wait for finish signal — callback only sets event on action_finished_* arcs
+        if callback_event.wait(timeout=30):
+            return payload   # may be {"message": []} on failure
+        # Timeout — sc-machine agent didn't respond
+        print(f"[REQUEST] Timeout waiting for action_user_request response")
+        return None
 
     def call_directory_agent (self ,action_name :str ,content :str )->str :
         """
@@ -2162,21 +2164,17 @@ class OstisUserRequestAgent (RequestAgent ):
         :param content: Контент, по которому происходит поиск в БЗ
         :return: Словарь со статусом результата выполнения агента юридических запросов
         """
-        global payload 
-        payload =None 
-        agent_response =self .ostis .call_user_request_agent (
-        action_name ="action_user_request",
-        content =content 
-        )
-        if agent_response is not None :
-            return {"status":RequestStatus .VALID ,
-            "message":agent_response ["message"]}
-        elif agent_response is None :
-            return {
-            "status":RequestStatus .INVALID ,
-            "message":"Invalid credentials",
-            }
-        raise AgentError 
+        try:
+            agent_response = self.ostis.call_user_request_agent(
+                action_name="action_user_request",
+                content=content,
+            )
+            if agent_response and isinstance(agent_response.get("message"), list):
+                return {"status": RequestStatus.VALID, "message": agent_response["message"]}
+            return {"status": RequestStatus.INVALID, "message": None}
+        except Exception as e:
+            print(f"[REQUEST] request_agent error: {e}")
+            return {"status": RequestStatus.INVALID, "message": None}
 
 class OstisDirectoryAgent (DirectoryAgent ):
     """
@@ -2519,6 +2517,686 @@ class OstisTestAgent (TestAgent ):
             return {"status":TestStatus .INVALID ,"message":"Failed to update rating"}
         except Exception as e :
             print (f"Error in update_rating: {e }")
-            import traceback 
+            import traceback
             traceback .print_exc ()
             return {"status":TestStatus .INVALID ,"message":str (e )}
+
+
+# ============================================================================
+# CABINET AGENTS - Profile, History, Bookmarks, Notes
+# ============================================================================
+
+# ---------------------------------------------------------------------------
+# Shared helpers (module-level, used by all cabinet agents)
+# ---------------------------------------------------------------------------
+
+def _resolve_kn(idtf: str, kn_type=sc_types.NODE_CONST_NOROLE) -> ScAddr:
+    """Resolve a single keynode by identifier, creating it if absent."""
+    return client.resolve_keynodes(
+        ScIdtfResolveParams(idtf=idtf, type=kn_type)
+    )[0]
+
+
+def _get_link_attr(node_addr: ScAddr, rel_idtf: str) -> str:
+    """Read the string content of a link reachable via a nrel quintuple."""
+    try:
+        rel = _resolve_kn(rel_idtf)
+        t = ScTemplate()
+        t.quintuple(node_addr, sc_types.EDGE_D_COMMON_VAR,
+                    sc_types.LINK_VAR >> '_v',
+                    sc_types.EDGE_ACCESS_VAR_POS_PERM, rel)
+        r = client.template_search(t)
+        if r:
+            c = client.get_link_content(r[0].get('_v'))
+            if c:
+                return c[0].data
+    except Exception as exc:
+        print(f"[CABINET] _get_link_attr({rel_idtf}): {exc}")
+    return ''
+
+
+def _set_link_attr(node_addr: ScAddr, rel_idtf: str, value: str):
+    """Write (or update) a string link attribute via a nrel quintuple."""
+    try:
+        rel = _resolve_kn(rel_idtf)
+        t = ScTemplate()
+        t.quintuple(node_addr, sc_types.EDGE_D_COMMON_VAR >> '_edge',
+                    sc_types.LINK_VAR >> '_v',
+                    sc_types.EDGE_ACCESS_VAR_POS_PERM, rel)
+        results = client.template_search(t)
+        if results:
+            link_addr = results[0].get('_v')
+            client.set_link_contents(ScLinkContent(value, ScLinkContentType.STRING, addr=link_addr))
+        else:
+            lc = ScLinkContent(value, ScLinkContentType.STRING)
+            con = ScConstruction()
+            con.create_link(sc_types.LINK_CONST, lc, 'lnk')
+            con.create_edge(sc_types.EDGE_D_COMMON_CONST, node_addr, 'lnk', 'edge')
+            con.create_edge(sc_types.EDGE_ACCESS_CONST_POS_PERM, rel, 'edge')
+            client.generate_elements(con)
+    except Exception as exc:
+        print(f"[CABINET] _set_link_attr({rel_idtf}): {exc}")
+
+
+# ---------------------------------------------------------------------------
+
+class OstisProfileAgent(ProfileAgent):
+    """Агент профиля пользователя — прямые операции с SC-памятью."""
+
+    def _is_specialist(self, user_addr: ScAddr) -> bool:
+        """Check if user belongs to concept_specialist class."""
+        try:
+            concept_specialist = client.resolve_keynodes(
+                ScIdtfResolveParams(idtf='concept_specialist', type=sc_types.NODE_CONST_CLASS)
+            )[0]
+            tmpl = ScTemplate()
+            tmpl.triple(concept_specialist, sc_types.EDGE_ACCESS_VAR_POS_PERM, user_addr)
+            return len(client.template_search(tmpl)) > 0
+        except Exception:
+            return False
+
+    def get_profile(self, user_email: str) -> dict:
+        print(f"[CABINET][PROFILE] get_profile | email={user_email}")
+        try:
+            if not is_connected():
+                return {'status': ProfileStatus.ERROR, 'message': 'Not connected to sc-machine'}
+            user_addr = get_user_by_login(user_email)
+            if not user_addr:
+                print(f"[CABINET][PROFILE] get_profile: user not found — {user_email}")
+                return {'status': ProfileStatus.INVALID, 'message': 'User not found'}
+
+            is_spec = self._is_specialist(user_addr)
+            name = (_get_link_attr(user_addr, 'nrel_full_name')
+                    or _get_link_attr(user_addr, 'nrel_user_name'))
+            jurisdiction = _get_link_attr(user_addr, 'nrel_default_jurisdiction') or 'BY'
+
+            profile = {
+                'email': user_email,
+                'name': name,
+                'jurisdiction': jurisdiction,
+                'user_type': 'specialist' if is_spec else 'client',
+            }
+            if is_spec:
+                profile['field']      = _get_link_attr(user_addr, 'nrel_field') or ''
+                profile['experience'] = _get_link_attr(user_addr, 'nrel_experience') or ''
+                profile['gender']     = _get_link_attr(user_addr, 'nrel_gender') or ''
+                profile['age']        = _get_link_attr(user_addr, 'nrel_age') or ''
+
+            print(f"[CABINET][PROFILE] get_profile OK | profile={profile}")
+            return {'status': ProfileStatus.VALID, 'profile': profile}
+        except Exception as e:
+            print(f"[CABINET][PROFILE] get_profile ERROR: {e}")
+            import traceback; traceback.print_exc()
+            return {'status': ProfileStatus.ERROR, 'message': str(e)}
+
+    def update_profile(self, user_email: str, data: dict) -> dict:
+        print(f"[CABINET][PROFILE] update_profile | email={user_email} data={data}")
+        try:
+            if not is_connected():
+                return {'status': ProfileStatus.ERROR, 'message': 'Not connected to sc-machine'}
+            user_addr = get_user_by_login(user_email)
+            if not user_addr:
+                return {'status': ProfileStatus.INVALID, 'message': 'User not found'}
+
+            if 'name' in data and data['name'] is not None:
+                _set_link_attr(user_addr, 'nrel_user_name', str(data['name']))
+                _set_link_attr(user_addr, 'nrel_full_name', str(data['name']))
+                print(f"[CABINET][PROFILE] update_profile: name → '{data['name']}'")
+            if 'jurisdiction' in data and data['jurisdiction'] is not None:
+                _set_link_attr(user_addr, 'nrel_default_jurisdiction', str(data['jurisdiction']))
+                print(f"[CABINET][PROFILE] update_profile: jurisdiction → '{data['jurisdiction']}'")
+            # Specialist-only fields
+            for key, rel in (('field', 'nrel_field'), ('experience', 'nrel_experience'),
+                             ('gender', 'nrel_gender'), ('age', 'nrel_age')):
+                if key in data and data[key] is not None:
+                    _set_link_attr(user_addr, rel, str(data[key]))
+                    print(f"[CABINET][PROFILE] update_profile: {key} → '{data[key]}'")
+
+            print("[CABINET][PROFILE] update_profile OK")
+            return {'status': ProfileStatus.VALID}
+        except Exception as e:
+            print(f"[CABINET][PROFILE] update_profile ERROR: {e}")
+            import traceback; traceback.print_exc()
+            return {'status': ProfileStatus.ERROR, 'message': str(e)}
+
+    def get_settings(self, user_email: str) -> dict:
+        print(f"[CABINET][PROFILE] get_settings | email={user_email}")
+        try:
+            if not is_connected():
+                return {'status': ProfileStatus.ERROR, 'message': 'Not connected', 'settings': {}}
+            user_addr = get_user_by_login(user_email)
+            if not user_addr:
+                print(f"[CABINET][PROFILE] get_settings: user not found — {user_email}")
+                return {'status': ProfileStatus.INVALID, 'settings': {}}
+
+            settings = {
+                'jurisdiction':  _get_link_attr(user_addr, 'nrel_default_jurisdiction') or 'BY',
+                'theme':         _get_link_attr(user_addr, 'nrel_ui_theme') or 'system',
+                'font_size':     _get_link_attr(user_addr, 'nrel_font_size') or 'normal',
+                'save_history':  _get_link_attr(user_addr, 'nrel_save_history') != 'false',
+                'high_contrast': _get_link_attr(user_addr, 'nrel_high_contrast') == 'true',
+            }
+            print(f"[CABINET][PROFILE] get_settings OK | settings={settings}")
+            return {'status': ProfileStatus.VALID, 'settings': settings}
+        except Exception as e:
+            print(f"[CABINET][PROFILE] get_settings ERROR: {e}")
+            import traceback; traceback.print_exc()
+            return {'status': ProfileStatus.ERROR, 'message': str(e), 'settings': {}}
+
+    def update_settings(self, user_email: str, settings: dict) -> dict:
+        print(f"[CABINET][PROFILE] update_settings | email={user_email} settings={settings}")
+        try:
+            if not is_connected():
+                return {'status': ProfileStatus.ERROR, 'message': 'Not connected'}
+            user_addr = get_user_by_login(user_email)
+            if not user_addr:
+                return {'status': ProfileStatus.INVALID}
+
+            relation_map = {
+                'jurisdiction':  'nrel_default_jurisdiction',
+                'theme':         'nrel_ui_theme',
+                'font_size':     'nrel_font_size',
+                'save_history':  'nrel_save_history',
+                'high_contrast': 'nrel_high_contrast',
+            }
+            updated = []
+            for key, value in settings.items():
+                if key in relation_map:
+                    _set_link_attr(user_addr, relation_map[key], str(value).lower())
+                    updated.append(key)
+
+            print(f"[CABINET][PROFILE] update_settings OK | keys={updated}")
+            return {'status': ProfileStatus.VALID}
+        except Exception as e:
+            print(f"[CABINET][PROFILE] update_settings ERROR: {e}")
+            import traceback; traceback.print_exc()
+            return {'status': ProfileStatus.ERROR, 'message': str(e)}
+
+
+class OstisHistoryAgent(HistoryAgent):
+    """Агент истории запросов — прямые операции с SC-памятью."""
+
+    def get_history(self, user_email: str, period: str = 'week') -> dict:
+        print(f"[CABINET][HISTORY] get_history | email={user_email} period={period}")
+        try:
+            if not is_connected():
+                return {'status': HistoryStatus.ERROR, 'history': []}
+            user_addr = get_user_by_login(user_email)
+            if not user_addr:
+                return {'status': HistoryStatus.INVALID, 'history': []}
+
+            nrel_qh = _resolve_kn('nrel_query_history')
+            t = ScTemplate()
+            t.quintuple(user_addr, sc_types.EDGE_D_COMMON_VAR,
+                        sc_types.NODE_VAR >> '_query',
+                        sc_types.EDGE_ACCESS_VAR_POS_PERM, nrel_qh)
+            results = client.template_search(t)
+
+            history = []
+            for res in results:
+                query_addr = res.get('_query')
+                history.append({
+                    'id':   str(query_addr.value),
+                    'type': _get_link_attr(query_addr, 'nrel_query_type') or 'Запрос',
+                    'text': _get_link_attr(query_addr, 'nrel_query_text') or '',
+                    'date': _get_link_attr(query_addr, 'nrel_query_timestamp') or '',
+                })
+
+            # Period filtering
+            if period != 'all' and history:
+                from datetime import timedelta
+                cutoff = datetime.now() - timedelta(days=7 if period == 'week' else 30)
+                filtered = []
+                for h in history:
+                    if not h['date']:
+                        filtered.append(h)
+                        continue
+                    try:
+                        if datetime.fromisoformat(h['date']) >= cutoff:
+                            filtered.append(h)
+                    except ValueError:
+                        filtered.append(h)
+                history = filtered
+
+            history.sort(key=lambda x: x['date'], reverse=True)
+            print(f"[CABINET][HISTORY] get_history OK | count={len(history)} period={period}")
+            return {'status': HistoryStatus.VALID, 'history': history}
+        except Exception as e:
+            print(f"[CABINET][HISTORY] get_history ERROR: {e}")
+            import traceback; traceback.print_exc()
+            return {'status': HistoryStatus.ERROR, 'history': []}
+
+    def add_history_entry(self, user_email: str, query_type: str,
+                          query_text: str, article_id: str = None) -> dict:
+        print(f"[CABINET][HISTORY] add_history_entry | email={user_email} "
+              f"type={query_type!r} text={query_text!r} article={article_id}")
+        try:
+            if not is_connected():
+                return {'status': HistoryStatus.ERROR, 'message': 'Not connected'}
+            user_addr = get_user_by_login(user_email)
+            if not user_addr:
+                return {'status': HistoryStatus.INVALID}
+
+            concept_uq = _resolve_kn('concept_user_query', sc_types.NODE_CONST_CLASS)
+            nrel_qh    = _resolve_kn('nrel_query_history')
+            nrel_qtype = _resolve_kn('nrel_query_type')
+            nrel_qtext = _resolve_kn('nrel_query_text')
+            nrel_qts   = _resolve_kn('nrel_query_timestamp')
+
+            timestamp = datetime.now().isoformat()
+
+            con = ScConstruction()
+            con.create_node(sc_types.NODE_CONST, 'query_node')
+            # Add to concept_user_query class
+            con.create_edge(sc_types.EDGE_ACCESS_CONST_POS_PERM, concept_uq, 'query_node', 'cls_edge')
+
+            con.create_link(sc_types.LINK_CONST,
+                            ScLinkContent(query_type, ScLinkContentType.STRING), 'type_lnk')
+            con.create_link(sc_types.LINK_CONST,
+                            ScLinkContent(query_text, ScLinkContentType.STRING), 'text_lnk')
+            con.create_link(sc_types.LINK_CONST,
+                            ScLinkContent(timestamp, ScLinkContentType.STRING), 'ts_lnk')
+
+            # nrel_query_type quintuple
+            con.create_edge(sc_types.EDGE_D_COMMON_CONST, 'query_node', 'type_lnk', 'type_edge')
+            con.create_edge(sc_types.EDGE_ACCESS_CONST_POS_PERM, nrel_qtype, 'type_edge')
+            # nrel_query_text quintuple
+            con.create_edge(sc_types.EDGE_D_COMMON_CONST, 'query_node', 'text_lnk', 'text_edge')
+            con.create_edge(sc_types.EDGE_ACCESS_CONST_POS_PERM, nrel_qtext, 'text_edge')
+            # nrel_query_timestamp quintuple
+            con.create_edge(sc_types.EDGE_D_COMMON_CONST, 'query_node', 'ts_lnk', 'ts_edge')
+            con.create_edge(sc_types.EDGE_ACCESS_CONST_POS_PERM, nrel_qts, 'ts_edge')
+            # user --[nrel_query_history]--> query_node
+            con.create_edge(sc_types.EDGE_D_COMMON_CONST, user_addr, 'query_node', 'hist_edge')
+            con.create_edge(sc_types.EDGE_ACCESS_CONST_POS_PERM, nrel_qh, 'hist_edge')
+
+            gen = client.generate_elements(con)
+            query_addr = gen[0]  # 'query_node' is at index 0 (first created element)
+            print(f"[CABINET][HISTORY] add_history_entry OK | id={query_addr.value}")
+            return {'status': HistoryStatus.VALID, 'id': str(query_addr.value)}
+        except Exception as e:
+            print(f"[CABINET][HISTORY] add_history_entry ERROR: {e}")
+            import traceback; traceback.print_exc()
+            return {'status': HistoryStatus.ERROR, 'message': str(e)}
+
+    def clear_history(self, user_email: str) -> dict:
+        print(f"[CABINET][HISTORY] clear_history | email={user_email}")
+        try:
+            if not is_connected():
+                return {'status': HistoryStatus.ERROR, 'message': 'Not connected'}
+            user_addr = get_user_by_login(user_email)
+            if not user_addr:
+                return {'status': HistoryStatus.INVALID}
+
+            nrel_qh = _resolve_kn('nrel_query_history')
+            t = ScTemplate()
+            t.quintuple(user_addr,
+                        sc_types.EDGE_D_COMMON_VAR >> '_he',
+                        sc_types.NODE_VAR >> '_query',
+                        sc_types.EDGE_ACCESS_VAR_POS_PERM >> '_re',
+                        nrel_qh)
+            results = client.template_search(t)
+
+            to_delete = []
+            for res in results:
+                to_delete.append(res.get('_he'))
+                to_delete.append(res.get('_re'))
+                to_delete.append(res.get('_query'))
+
+            if to_delete:
+                client.erase_elements(*to_delete)
+
+            print(f"[CABINET][HISTORY] clear_history OK | removed {len(results)} entries")
+            return {'status': HistoryStatus.VALID}
+        except Exception as e:
+            print(f"[CABINET][HISTORY] clear_history ERROR: {e}")
+            import traceback; traceback.print_exc()
+            return {'status': HistoryStatus.ERROR, 'message': str(e)}
+
+
+class OstisBookmarksAgent(BookmarksAgent):
+    """Агент закладок — прямые операции с SC-памятью."""
+
+    def get_bookmarks(self, user_email: str) -> dict:
+        print(f"[CABINET][BOOKMARKS] get_bookmarks | email={user_email}")
+        try:
+            if not is_connected():
+                return {'status': BookmarksStatus.ERROR, 'bookmarks': []}
+            user_addr = get_user_by_login(user_email)
+            if not user_addr:
+                return {'status': BookmarksStatus.INVALID, 'bookmarks': []}
+
+            nrel_ub = _resolve_kn('nrel_user_bookmarks')
+            t = ScTemplate()
+            t.quintuple(user_addr, sc_types.EDGE_D_COMMON_VAR,
+                        sc_types.NODE_VAR >> '_bm',
+                        sc_types.EDGE_ACCESS_VAR_POS_PERM, nrel_ub)
+            results = client.template_search(t)
+
+            bookmarks = []
+            for res in results:
+                bm_addr = res.get('_bm')
+                tags_raw = _get_link_attr(bm_addr, 'nrel_bookmark_tags')
+                bookmarks.append({
+                    'id':         str(bm_addr.value),
+                    'article_id': _get_link_attr(bm_addr, 'nrel_bookmark_article'),
+                    'title':      _get_link_attr(bm_addr, 'nrel_bookmark_title'),
+                    'tags':       [tg.strip() for tg in tags_raw.split(',') if tg.strip()],
+                    'date':       _get_link_attr(bm_addr, 'nrel_bookmark_date'),
+                })
+
+            print(f"[CABINET][BOOKMARKS] get_bookmarks OK | count={len(bookmarks)}")
+            return {'status': BookmarksStatus.VALID, 'bookmarks': bookmarks}
+        except Exception as e:
+            print(f"[CABINET][BOOKMARKS] get_bookmarks ERROR: {e}")
+            import traceback; traceback.print_exc()
+            return {'status': BookmarksStatus.ERROR, 'bookmarks': []}
+
+    def add_bookmark(self, user_email: str, article_id: str,
+                     title: str, tags: list = None) -> dict:
+        print(f"[CABINET][BOOKMARKS] add_bookmark | email={user_email} "
+              f"title={title!r} tags={tags}")
+        try:
+            if not is_connected():
+                return {'status': BookmarksStatus.ERROR, 'message': 'Not connected'}
+            user_addr = get_user_by_login(user_email)
+            if not user_addr:
+                return {'status': BookmarksStatus.INVALID, 'message': 'User not found'}
+
+            concept_bm = _resolve_kn('concept_bookmark', sc_types.NODE_CONST_CLASS)
+            nrel_ub    = _resolve_kn('nrel_user_bookmarks')
+            nrel_bart  = _resolve_kn('nrel_bookmark_article')
+            nrel_btitl = _resolve_kn('nrel_bookmark_title')
+            nrel_btags = _resolve_kn('nrel_bookmark_tags')
+            nrel_bdate = _resolve_kn('nrel_bookmark_date')
+
+            date_str = datetime.now().isoformat()
+            tags_str = ','.join(tags) if tags else ''
+
+            con = ScConstruction()
+            con.create_node(sc_types.NODE_CONST, 'bm_node')
+            # Add to concept_bookmark class
+            con.create_edge(sc_types.EDGE_ACCESS_CONST_POS_PERM, concept_bm, 'bm_node', 'cls_edge')
+
+            con.create_link(sc_types.LINK_CONST,
+                            ScLinkContent(article_id or '', ScLinkContentType.STRING), 'art_lnk')
+            con.create_link(sc_types.LINK_CONST,
+                            ScLinkContent(title or '',      ScLinkContentType.STRING), 'ttl_lnk')
+            con.create_link(sc_types.LINK_CONST,
+                            ScLinkContent(tags_str,         ScLinkContentType.STRING), 'tag_lnk')
+            con.create_link(sc_types.LINK_CONST,
+                            ScLinkContent(date_str,         ScLinkContentType.STRING), 'dt_lnk')
+
+            # nrel_bookmark_article quintuple
+            con.create_edge(sc_types.EDGE_D_COMMON_CONST, 'bm_node', 'art_lnk', 'art_edge')
+            con.create_edge(sc_types.EDGE_ACCESS_CONST_POS_PERM, nrel_bart, 'art_edge')
+            # nrel_bookmark_title quintuple
+            con.create_edge(sc_types.EDGE_D_COMMON_CONST, 'bm_node', 'ttl_lnk', 'ttl_edge')
+            con.create_edge(sc_types.EDGE_ACCESS_CONST_POS_PERM, nrel_btitl, 'ttl_edge')
+            # nrel_bookmark_tags quintuple
+            con.create_edge(sc_types.EDGE_D_COMMON_CONST, 'bm_node', 'tag_lnk', 'tag_edge')
+            con.create_edge(sc_types.EDGE_ACCESS_CONST_POS_PERM, nrel_btags, 'tag_edge')
+            # nrel_bookmark_date quintuple
+            con.create_edge(sc_types.EDGE_D_COMMON_CONST, 'bm_node', 'dt_lnk', 'dt_edge')
+            con.create_edge(sc_types.EDGE_ACCESS_CONST_POS_PERM, nrel_bdate, 'dt_edge')
+            # user --[nrel_user_bookmarks]--> bookmark
+            con.create_edge(sc_types.EDGE_D_COMMON_CONST, user_addr, 'bm_node', 'usr_edge')
+            con.create_edge(sc_types.EDGE_ACCESS_CONST_POS_PERM, nrel_ub, 'usr_edge')
+
+            gen = client.generate_elements(con)
+            bm_addr = gen[0]  # 'bm_node' is at index 0
+            print(f"[CABINET][BOOKMARKS] add_bookmark OK | id={bm_addr.value}")
+            return {'status': BookmarksStatus.VALID, 'id': str(bm_addr.value)}
+        except Exception as e:
+            print(f"[CABINET][BOOKMARKS] add_bookmark ERROR: {e}")
+            import traceback; traceback.print_exc()
+            return {'status': BookmarksStatus.ERROR, 'message': str(e)}
+
+    def update_bookmark(self, user_email: str, bookmark_id: str,
+                        tags: list = None) -> dict:
+        print(f"[CABINET][BOOKMARKS] update_bookmark | email={user_email} "
+              f"id={bookmark_id} tags={tags}")
+        try:
+            if not is_connected():
+                return {'status': BookmarksStatus.ERROR, 'message': 'Not connected'}
+            bm_addr = ScAddr(int(bookmark_id))
+            nrel_btags = _resolve_kn('nrel_bookmark_tags')
+            tags_str = ','.join(tags) if tags else ''
+
+            t = ScTemplate()
+            t.quintuple(bm_addr, sc_types.EDGE_D_COMMON_VAR >> '_edge',
+                        sc_types.LINK_VAR >> '_tags',
+                        sc_types.EDGE_ACCESS_VAR_POS_PERM, nrel_btags)
+            results = client.template_search(t)
+
+            if results:
+                tags_link = results[0].get('_tags')
+                client.set_link_contents(ScLinkContent(tags_str, ScLinkContentType.STRING, addr=tags_link))
+                print(f"[CABINET][BOOKMARKS] update_bookmark OK | updated existing link")
+            else:
+                con = ScConstruction()
+                con.create_link(sc_types.LINK_CONST,
+                                ScLinkContent(tags_str, ScLinkContentType.STRING), 'tag_lnk')
+                con.create_edge(sc_types.EDGE_D_COMMON_CONST, bm_addr, 'tag_lnk', 'tag_edge')
+                con.create_edge(sc_types.EDGE_ACCESS_CONST_POS_PERM, nrel_btags, 'tag_edge')
+                client.generate_elements(con)
+                print(f"[CABINET][BOOKMARKS] update_bookmark OK | created new tags link")
+
+            return {'status': BookmarksStatus.VALID}
+        except Exception as e:
+            print(f"[CABINET][BOOKMARKS] update_bookmark ERROR: {e}")
+            import traceback; traceback.print_exc()
+            return {'status': BookmarksStatus.ERROR, 'message': str(e)}
+
+    def delete_bookmark(self, user_email: str, bookmark_id: str) -> dict:
+        print(f"[CABINET][BOOKMARKS] delete_bookmark | email={user_email} id={bookmark_id}")
+        try:
+            if not is_connected():
+                return {'status': BookmarksStatus.ERROR, 'message': 'Not connected'}
+            bm_addr = ScAddr(int(bookmark_id))
+
+            # Remove the connecting edge from user -> bookmark
+            user_addr = get_user_by_login(user_email)
+            if user_addr:
+                nrel_ub = _resolve_kn('nrel_user_bookmarks')
+                t = ScTemplate()
+                t.quintuple(user_addr, sc_types.EDGE_D_COMMON_VAR >> '_edge',
+                            bm_addr, sc_types.EDGE_ACCESS_VAR_POS_PERM, nrel_ub)
+                results = client.template_search(t)
+                for r in results:
+                    edge_addr = r.get('_edge')
+                    if edge_addr:
+                        client.erase_elements(edge_addr)
+
+            client.erase_elements(bm_addr)
+            print(f"[CABINET][BOOKMARKS] delete_bookmark OK | id={bookmark_id}")
+            return {'status': BookmarksStatus.VALID}
+        except Exception as e:
+            print(f"[CABINET][BOOKMARKS] delete_bookmark ERROR: {e}")
+            import traceback; traceback.print_exc()
+            return {'status': BookmarksStatus.ERROR, 'message': str(e)}
+
+
+class OstisNotesAgent(NotesAgent):
+    """Агент заметок — прямые операции с SC-памятью."""
+
+    def get_notes(self, user_email: str) -> dict:
+        print(f"[CABINET][NOTES] get_notes | email={user_email}")
+        try:
+            if not is_connected():
+                return {'status': NotesStatus.ERROR, 'notes': []}
+            user_addr = get_user_by_login(user_email)
+            if not user_addr:
+                return {'status': NotesStatus.INVALID, 'notes': []}
+
+            nrel_un = _resolve_kn('nrel_user_notes')
+            t = ScTemplate()
+            t.quintuple(user_addr, sc_types.EDGE_D_COMMON_VAR,
+                        sc_types.NODE_VAR >> '_note',
+                        sc_types.EDGE_ACCESS_VAR_POS_PERM, nrel_un)
+            results = client.template_search(t)
+
+            notes = []
+            for res in results:
+                note_addr = res.get('_note')
+                notes.append({
+                    'id':            str(note_addr.value),
+                    'article_id':    _get_link_attr(note_addr, 'nrel_note_article'),
+                    'article_title': _get_link_attr(note_addr, 'nrel_note_article_title'),
+                    'text':          _get_link_attr(note_addr, 'nrel_note_text'),
+                    'created_at':    _get_link_attr(note_addr, 'nrel_note_created'),
+                    'updated_at':    _get_link_attr(note_addr, 'nrel_note_updated'),
+                })
+
+            print(f"[CABINET][NOTES] get_notes OK | count={len(notes)}")
+            return {'status': NotesStatus.VALID, 'notes': notes}
+        except Exception as e:
+            print(f"[CABINET][NOTES] get_notes ERROR: {e}")
+            import traceback; traceback.print_exc()
+            return {'status': NotesStatus.ERROR, 'notes': []}
+
+    def add_note(self, user_email: str, article_id: str,
+                 article_title: str, text: str) -> dict:
+        print(f"[CABINET][NOTES] add_note | email={user_email} title={article_title!r}")
+        try:
+            if not is_connected():
+                return {'status': NotesStatus.ERROR, 'message': 'Not connected'}
+            user_addr = get_user_by_login(user_email)
+            if not user_addr:
+                return {'status': NotesStatus.INVALID, 'message': 'User not found'}
+
+            concept_un   = _resolve_kn('concept_user_note', sc_types.NODE_CONST_CLASS)
+            nrel_un      = _resolve_kn('nrel_user_notes')
+            nrel_nart    = _resolve_kn('nrel_note_article')
+            nrel_narttit = _resolve_kn('nrel_note_article_title')
+            nrel_ntxt    = _resolve_kn('nrel_note_text')
+            nrel_ncr     = _resolve_kn('nrel_note_created')
+            nrel_nupd    = _resolve_kn('nrel_note_updated')
+
+            timestamp = datetime.now().isoformat()
+
+            con = ScConstruction()
+            con.create_node(sc_types.NODE_CONST, 'note_node')
+            # Add to concept_user_note class
+            con.create_edge(sc_types.EDGE_ACCESS_CONST_POS_PERM, concept_un, 'note_node', 'cls_edge')
+
+            con.create_link(sc_types.LINK_CONST,
+                            ScLinkContent(article_id or '',    ScLinkContentType.STRING), 'art_lnk')
+            con.create_link(sc_types.LINK_CONST,
+                            ScLinkContent(article_title or '', ScLinkContentType.STRING), 'tit_lnk')
+            con.create_link(sc_types.LINK_CONST,
+                            ScLinkContent(text or '',          ScLinkContentType.STRING), 'txt_lnk')
+            con.create_link(sc_types.LINK_CONST,
+                            ScLinkContent(timestamp,           ScLinkContentType.STRING), 'cr_lnk')
+            con.create_link(sc_types.LINK_CONST,
+                            ScLinkContent(timestamp,           ScLinkContentType.STRING), 'upd_lnk')
+
+            # nrel_note_article quintuple
+            con.create_edge(sc_types.EDGE_D_COMMON_CONST, 'note_node', 'art_lnk', 'art_edge')
+            con.create_edge(sc_types.EDGE_ACCESS_CONST_POS_PERM, nrel_nart, 'art_edge')
+            # nrel_note_article_title quintuple
+            con.create_edge(sc_types.EDGE_D_COMMON_CONST, 'note_node', 'tit_lnk', 'tit_edge')
+            con.create_edge(sc_types.EDGE_ACCESS_CONST_POS_PERM, nrel_narttit, 'tit_edge')
+            # nrel_note_text quintuple
+            con.create_edge(sc_types.EDGE_D_COMMON_CONST, 'note_node', 'txt_lnk', 'txt_edge')
+            con.create_edge(sc_types.EDGE_ACCESS_CONST_POS_PERM, nrel_ntxt, 'txt_edge')
+            # nrel_note_created quintuple
+            con.create_edge(sc_types.EDGE_D_COMMON_CONST, 'note_node', 'cr_lnk', 'cr_edge')
+            con.create_edge(sc_types.EDGE_ACCESS_CONST_POS_PERM, nrel_ncr, 'cr_edge')
+            # nrel_note_updated quintuple
+            con.create_edge(sc_types.EDGE_D_COMMON_CONST, 'note_node', 'upd_lnk', 'upd_edge')
+            con.create_edge(sc_types.EDGE_ACCESS_CONST_POS_PERM, nrel_nupd, 'upd_edge')
+            # user --[nrel_user_notes]--> note
+            con.create_edge(sc_types.EDGE_D_COMMON_CONST, user_addr, 'note_node', 'usr_edge')
+            con.create_edge(sc_types.EDGE_ACCESS_CONST_POS_PERM, nrel_un, 'usr_edge')
+
+            gen = client.generate_elements(con)
+            note_addr = gen[0]  # 'note_node' is at index 0
+            print(f"[CABINET][NOTES] add_note OK | id={note_addr.value}")
+            return {'status': NotesStatus.VALID, 'id': str(note_addr.value)}
+        except Exception as e:
+            print(f"[CABINET][NOTES] add_note ERROR: {e}")
+            import traceback; traceback.print_exc()
+            return {'status': NotesStatus.ERROR, 'message': str(e)}
+
+    def update_note(self, user_email: str, note_id: str, text: str) -> dict:
+        print(f"[CABINET][NOTES] update_note | email={user_email} id={note_id}")
+        try:
+            if not is_connected():
+                return {'status': NotesStatus.ERROR, 'message': 'Not connected'}
+            note_addr = ScAddr(int(note_id))
+            nrel_ntxt  = _resolve_kn('nrel_note_text')
+            nrel_nupd  = _resolve_kn('nrel_note_updated')
+            timestamp = datetime.now().isoformat()
+
+            # Update text link
+            t = ScTemplate()
+            t.quintuple(note_addr, sc_types.EDGE_D_COMMON_VAR,
+                        sc_types.LINK_VAR >> '_txt',
+                        sc_types.EDGE_ACCESS_VAR_POS_PERM, nrel_ntxt)
+            r = client.template_search(t)
+            if r:
+                txt_addr = r[0].get('_txt')
+                client.set_link_contents(ScLinkContent(text, ScLinkContentType.STRING, addr=txt_addr))
+                print(f"[CABINET][NOTES] update_note: text updated")
+
+            # Update timestamp link
+            t2 = ScTemplate()
+            t2.quintuple(note_addr, sc_types.EDGE_D_COMMON_VAR,
+                         sc_types.LINK_VAR >> '_upd',
+                         sc_types.EDGE_ACCESS_VAR_POS_PERM, nrel_nupd)
+            r2 = client.template_search(t2)
+            if r2:
+                upd_addr = r2[0].get('_upd')
+                client.set_link_contents(ScLinkContent(timestamp, ScLinkContentType.STRING, addr=upd_addr))
+                print(f"[CABINET][NOTES] update_note: timestamp updated")
+
+            print(f"[CABINET][NOTES] update_note OK | id={note_id}")
+            return {'status': NotesStatus.VALID}
+        except Exception as e:
+            print(f"[CABINET][NOTES] update_note ERROR: {e}")
+            import traceback; traceback.print_exc()
+            return {'status': NotesStatus.ERROR, 'message': str(e)}
+
+    def delete_note(self, user_email: str, note_id: str) -> dict:
+        print(f"[CABINET][NOTES] delete_note | email={user_email} id={note_id}")
+        try:
+            if not is_connected():
+                return {'status': NotesStatus.ERROR, 'message': 'Not connected'}
+            note_addr = ScAddr(int(note_id))
+
+            # Remove the connecting edge from user -> note
+            user_addr = get_user_by_login(user_email)
+            if user_addr:
+                nrel_un = _resolve_kn('nrel_user_notes')
+                t = ScTemplate()
+                t.quintuple(user_addr, sc_types.EDGE_D_COMMON_VAR >> '_edge',
+                            note_addr, sc_types.EDGE_ACCESS_VAR_POS_PERM, nrel_un)
+                results = client.template_search(t)
+                for r in results:
+                    edge_addr = r.get('_edge')
+                    if edge_addr:
+                        client.erase_elements(edge_addr)
+
+            client.erase_elements(note_addr)
+            print(f"[CABINET][NOTES] delete_note OK | id={note_id}")
+            return {'status': NotesStatus.VALID}
+        except Exception as e:
+            print(f"[CABINET][NOTES] delete_note ERROR: {e}")
+            import traceback; traceback.print_exc()
+            return {'status': NotesStatus.ERROR, 'message': str(e)}
+
+    def _get_attr(self, node_addr: ScAddr, rel_idtf: str) -> str:
+        try:
+            rel = client.resolve_keynodes(ScIdtfResolveParams(idtf=rel_idtf, type=sc_types.NODE_CONST_NOROLE))[0]
+            t = ScTemplate()
+            t.quintuple(node_addr, sc_types.EDGE_D_COMMON_VAR, sc_types.LINK_VAR >> '_v',
+                        sc_types.EDGE_ACCESS_VAR_POS_PERM, rel)
+            r = client.template_search(t)
+            if r:
+                c = client.get_link_content(r[0].get('_v'))
+                if c:
+                    return c[0].data
+        except:
+            pass
+        return ''

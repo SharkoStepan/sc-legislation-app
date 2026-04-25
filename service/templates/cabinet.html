@@ -32,9 +32,10 @@
         <!-- Sidebar -->
         <aside class="cabinet-sidebar">
           <div class="user-card">
-            <img src="{{ url_for('static', filename='images/user.png') }}" alt="Аватар">
+            <img id="sidebar-avatar" src="{{ url_for('static', filename='images/user.png') }}" alt="Аватар"
+                 style="border-radius:50%;object-fit:cover;">
             <div class="user-name">{{ current_user.username }}</div>
-            <span class="user-role">Клиент</span>
+            <span class="user-role" id="sidebar-role">Клиент</span>
           </div>
           <nav class="sidebar-nav" role="navigation" aria-label="Навигация по кабинету">
             <button class="active" data-tab="profile" data-tooltip="Просмотр и редактирование личных данных">👤 Профиль</button>
@@ -56,15 +57,27 @@
             <div class="section">
               <h2>Профиль</h2>
               <div class="profile-header">
-                <div class="profile-avatar" aria-label="Аватар">👤</div>
+                <div style="position:relative;display:inline-block;cursor:pointer;" title="Нажмите для загрузки фото"
+                     onclick="document.getElementById('avatar-file-input').click()">
+                  <img id="profile-avatar-img"
+                       src="{{ url_for('static', filename='images/user.png') }}"
+                       alt="Аватар"
+                       style="width:80px;height:80px;border-radius:50%;object-fit:cover;border:3px solid #4D4FA3;">
+                  <div style="position:absolute;bottom:0;right:0;background:#4D4FA3;color:#fff;
+                              border-radius:50%;width:24px;height:24px;display:flex;align-items:center;
+                              justify-content:center;font-size:14px;">✎</div>
+                </div>
+                <input type="file" id="avatar-file-input" accept="image/*"
+                       style="display:none;" onchange="handleAvatarUpload(event)">
                 <div class="profile-main">
-                  <div class="profile-name">{{ current_user.username }}</div>
-                  <div class="profile-meta">Роль: Клиент</div>
-                  <div class="profile-meta">Юрисдикция: Беларусь</div>
-                  <div class="profile-edit-link" tabindex="0" role="button" data-tooltip="Открыть форму редактирования">Изменить данные профиля</div>
+                  <div class="profile-name" id="profile-display-name">{{ current_user.username }}</div>
+                  <div class="profile-meta">{{ current_user.username }}</div>
+                  <div class="profile-meta" id="profile-display-jur">Юрисдикция: BY</div>
                 </div>
               </div>
-              <p>Основные данные пользователя.</p>
+
+              <!-- Общие поля (для всех) -->
+              <p style="margin-top:16px;" id="profile-type-label">Основные данные пользователя.</p>
               <div class="grid-2">
                 <div>
                   <label for="profile-name">ФИО / Ник</label>
@@ -72,21 +85,67 @@
                 </div>
                 <div>
                   <label for="profile-email">Email</label>
-                  <input type="email" id="profile-email" value="{{ current_user.username }}" data-tooltip="Адрес электронной почты" />
+                  <input type="email" id="profile-email" value="{{ current_user.username }}" readonly style="opacity:0.7;cursor:not-allowed;" data-tooltip="Email нельзя изменить" />
                 </div>
                 <div>
                   <label for="profile-jurisdiction">Юрисдикция по умолчанию</label>
                   <select id="profile-jurisdiction" data-tooltip="Выберите страну для поиска по умолчанию">
-                    <option selected>Беларусь</option>
-                    <option>Россия</option>
-                    <option>Европейский союз</option>
-                    <option>США</option>
+                    <option value="BY">Беларусь</option>
+                    <option value="RU">Россия</option>
+                    <option value="EU">Европейский союз</option>
+                    <option value="US">США</option>
                   </select>
                 </div>
               </div>
-              <div class="actions">
-                <button class="btn-primary" data-tooltip="Сохранить все изменения профиля">Сохранить изменения</button>
-                <button class="btn-secondary" data-tooltip="Отменить несохранённые изменения">Отменить</button>
+
+              <!-- Поля специалиста (скрыты по умолчанию) -->
+              <div id="specialist-fields" style="display:none; margin-top:20px; border-top:1px solid #E9E9FD; padding-top:20px;">
+                <p style="font-weight:600; color:#4D4FA3; margin-bottom:12px;">Данные специалиста</p>
+                <div class="grid-2">
+                  <div>
+                    <label for="profile-field">Область специализации</label>
+                    <select id="profile-field" data-tooltip="Выберите вашу область права">
+                      <option value="">— Выберите —</option>
+                      <option value="civil">Гражданское право</option>
+                      <option value="criminal">Уголовное право</option>
+                      <option value="administrative">Административное право</option>
+                      <option value="labor">Трудовое право</option>
+                      <option value="family">Семейное право</option>
+                      <option value="corporate">Корпоративное право</option>
+                      <option value="tax">Налоговое право</option>
+                      <option value="international">Международное право</option>
+                      <option value="other">Другое</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label for="profile-experience">Опыт работы</label>
+                    <select id="profile-experience" data-tooltip="Укажите ваш опыт">
+                      <option value="">— Выберите —</option>
+                      <option value="less1">Менее 1 года</option>
+                      <option value="1-3">1–3 года</option>
+                      <option value="3-5">3–5 лет</option>
+                      <option value="5-10">5–10 лет</option>
+                      <option value="10+">Более 10 лет</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label for="profile-gender">Пол</label>
+                    <select id="profile-gender" data-tooltip="Укажите ваш пол">
+                      <option value="">— Не указан —</option>
+                      <option value="male">Мужской</option>
+                      <option value="female">Женский</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label for="profile-age">Возраст</label>
+                    <input type="number" id="profile-age" placeholder="Введите возраст" min="18" max="100"
+                           data-tooltip="Укажите ваш возраст" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-size:15px;" />
+                  </div>
+                </div>
+              </div>
+
+              <div class="actions" style="margin-top:16px;">
+                <button class="btn-primary" onclick="saveProfile()" data-tooltip="Сохранить все изменения профиля">Сохранить изменения</button>
               </div>
             </div>
           </section>
@@ -103,7 +162,7 @@
                 </div>
                 <div>
                   <label for="history-period">Период</label>
-                  <select id="history-period" data-tooltip="Выберите временной период">
+                  <select id="history-period" data-tooltip="Выберите временной период" onchange="loadHistory()">
                     <option>За неделю</option>
                     <option>За месяц</option>
                     <option>За всё время</option>
@@ -127,23 +186,13 @@
                     <th>Описание</th>
                   </tr>
                 </thead>
-                <tbody>
-                  <tr data-date="2026-03-02T13:20" data-type="Запрос">
-                    <td>02.03.2026 13:20</td><td>Запрос</td><td>«Ответственность за нарушение трудового договора»</td>
-                  </tr>
-                  <tr data-date="2026-03-02T13:22" data-type="Статья">
-                    <td>02.03.2026 13:22</td><td>Статья</td><td>Кодекс Республики Беларусь о труде, статья 43</td>
-                  </tr>
-                  <tr data-date="2026-03-01T10:15" data-type="Запрос">
-                    <td>01.03.2026 10:15</td><td>Запрос</td><td>«Алименты на несовершеннолетних детей»</td>
-                  </tr>
-                  <tr data-date="2026-02-28T16:45" data-type="Статья">
-                    <td>28.02.2026 16:45</td><td>Статья</td><td>Гражданский кодекс, статья 128</td>
-                  </tr>
+                <tbody id="history-tbody">
+                  <!-- populated dynamically by loadHistory() -->
                 </tbody>
               </table>
+              <p id="history-empty" style="display:none;text-align:center;padding:20px;color:#6B7280;">История запросов пуста.</p>
               <div class="actions" style="margin-top:16px;">
-                <button class="btn-secondary" data-tooltip="Удалить всю историю обращений">Очистить историю</button>
+                <button class="btn-secondary" onclick="clearHistoryAPI()" data-tooltip="Удалить всю историю обращений">Очистить историю</button>
               </div>
             </div>
           </section>
@@ -172,40 +221,33 @@
                   <option value="name-desc">По названию (Я-А)</option>
                 </select>
               </div>
+              <!-- Add bookmark form -->
+              <div class="section" style="margin:12px 0;border:1px solid #E5E7EB;border-radius:8px;padding:12px;">
+                <h3 style="margin-top:0;">Добавить закладку</h3>
+                <div class="grid-2" style="margin-bottom:8px;">
+                  <div style="position:relative;">
+                    <label for="bm-title-input">Название статьи</label>
+                    <input type="text" id="bm-title-input" placeholder="Введите название документа" autocomplete="off" />
+                    <div id="bm-title-dropdown"
+                         style="display:none;position:absolute;z-index:100;background:#fff;border:1px solid #E5E7EB;
+                                border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.1);width:100%;max-height:200px;overflow-y:auto;"></div>
+                  </div>
+                  <div>
+                    <label for="bm-tags-input">Теги (через запятую)</label>
+                    <input type="text" id="bm-tags-input" placeholder="Трудовое право, РБ" />
+                  </div>
+                </div>
+                <button class="btn-primary" onclick="addBookmarkAPI()" style="padding:8px 16px;">Добавить закладку</button>
+              </div>
+
               <table id="bookmarks-table">
                 <thead>
                   <tr>
                     <th>Название</th><th>Метки</th><th>Дата</th><th>Действия</th>
                   </tr>
                 </thead>
-                <tbody>
-                  <tr data-date="2026-03-01" data-name="Кодекс о земле Республики Беларусь" data-tags="РБ,Земельное право">
-                    <td>Кодекс о земле Республики Беларусь</td>
-                    <td><span class="tag">РБ</span><span class="tag">Земельное право</span></td>
-                    <td>01.03.2026</td>
-                    <td>
-                      <button class="btn-secondary" style="padding:6px 10px;">Открыть</button>
-                      <button class="btn-danger" style="padding:6px 10px;">✕</button>
-                    </td>
-                  </tr>
-                  <tr data-date="2026-02-28" data-name="Трудовой договор: общие положения" data-tags="Трудовое право">
-                    <td>Трудовой договор: общие положения</td>
-                    <td><span class="tag">Трудовое право</span></td>
-                    <td>28.02.2026</td>
-                    <td>
-                      <button class="btn-secondary" style="padding:6px 10px;">Открыть</button>
-                      <button class="btn-danger" style="padding:6px 10px;">✕</button>
-                    </td>
-                  </tr>
-                  <tr data-date="2026-02-25" data-name="Гражданский кодекс: право собственности" data-tags="РБ,Гражданское право">
-                    <td>Гражданский кодекс: право собственности</td>
-                    <td><span class="tag">РБ</span><span class="tag">Гражданское право</span></td>
-                    <td>25.02.2026</td>
-                    <td>
-                      <button class="btn-secondary" style="padding:6px 10px;">Открыть</button>
-                      <button class="btn-danger" style="padding:6px 10px;">✕</button>
-                    </td>
-                  </tr>
+                <tbody id="bookmarks-tbody">
+                  <!-- populated dynamically by loadBookmarks() -->
                 </tbody>
               </table>
               <p id="bookmarks-empty" style="display:none;text-align:center;padding:20px;color:#6B7280;">Закладки не найдены по заданным критериям.</p>
@@ -220,43 +262,51 @@
               <div class="grid-2" style="margin-bottom:12px;">
                 <div>
                   <label for="notes-search">Поиск по тексту заметки</label>
-                  <input type="text" id="notes-search" placeholder="Введите текст для поиска" />
+                  <input type="text" id="notes-search" placeholder="Введите текст для поиска" oninput="filterNotes()" />
                 </div>
                 <div>
                   <label for="notes-article">Фильтр по статье</label>
-                  <input type="text" id="notes-article" placeholder="Название статьи или код" />
+                  <input type="text" id="notes-article" placeholder="Название статьи или код" oninput="filterNotes()" />
                 </div>
               </div>
 
-              <div class="section" style="margin:0 0 12px; border-left: 4px solid #4D4FA3;">
-                <h3>Кодекс о земле Республики Беларусь — статья 12</h3>
-                <div class="article-preview">
-                  <div class="article-preview-label">Начало статьи</div>
-                  Статья 12. Право частной собственности на земельные участки. Земельные участки могут находиться в частной собственности граждан Республики Беларусь...
+              <!-- Add note form -->
+              <div class="section" style="margin:0 0 12px;border:1px solid #E5E7EB;border-radius:8px;padding:12px;">
+                <h3 style="margin-top:0;">Добавить заметку</h3>
+                <div class="grid-2" style="margin-bottom:8px;">
+                  <div style="position:relative;">
+                    <label for="note-article-input">Название статьи</label>
+                    <input type="text" id="note-article-input" placeholder="Название или код статьи" autocomplete="off" />
+                    <div id="note-article-dropdown"
+                         style="display:none;position:absolute;z-index:100;background:#fff;border:1px solid #E5E7EB;
+                                border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.1);width:100%;max-height:200px;overflow-y:auto;"></div>
+                  </div>
+                  <div>
+                    <label for="note-text-input">Текст заметки</label>
+                    <textarea id="note-text-input" rows="3" placeholder="Введите заметку..." style="width:100%;box-sizing:border-box;"></textarea>
+                  </div>
                 </div>
-                <p style="font-size:14px;color:#374151;margin-top:8px;"><strong>Ваша заметка:</strong> Проверить актуальную редакцию, возможны изменения после 2025 года.</p>
-                <p style="font-size:12px;color:#6B7280;margin-top:4px;">Создано: 01.03.2026 • Обновлено: 01.03.2026</p>
-                <div class="actions">
-                  <button class="btn-secondary" style="padding:8px 14px;">Редактировать</button>
-                  <button class="btn-secondary" style="padding:8px 14px;">Перейти к статье</button>
-                  <button class="btn-danger" style="padding:8px 14px;">Удалить</button>
+                <button class="btn-primary" onclick="addNoteAPI()" style="padding:8px 16px;">Добавить заметку</button>
+              </div>
+
+              <!-- Edit note modal (hidden) -->
+              <div id="edit-note-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;">
+                <div style="background:#fff;padding:24px;border-radius:12px;max-width:500px;width:90%;">
+                  <h3 style="margin-top:0;">Редактировать заметку</h3>
+                  <input type="hidden" id="edit-note-id" />
+                  <textarea id="edit-note-text" rows="5" style="width:100%;box-sizing:border-box;margin-bottom:12px;"></textarea>
+                  <div class="actions">
+                    <button class="btn-primary" onclick="saveNoteEdit()">Сохранить</button>
+                    <button class="btn-secondary" onclick="closeNoteModal()">Отмена</button>
+                  </div>
                 </div>
               </div>
 
-              <div class="section" style="margin:0; border-left: 4px solid #4D4FA3;">
-                <h3>Трудовой договор — общие положения</h3>
-                <div class="article-preview">
-                  <div class="article-preview-label">Начало статьи</div>
-                  Статья 17. Трудовой договор — соглашение между работником и нанимателем...
-                </div>
-                <p style="font-size:14px;color:#374151;margin-top:8px;"><strong>Ваша заметка:</strong> Важный кейс для автоматизации проверки условий договора.</p>
-                <p style="font-size:12px;color:#6B7280;margin-top:4px;">Создано: 28.02.2026 • Обновлено: 28.02.2026</p>
-                <div class="actions">
-                  <button class="btn-secondary" style="padding:8px 14px;">Редактировать</button>
-                  <button class="btn-secondary" style="padding:8px 14px;">Перейти к статье</button>
-                  <button class="btn-danger" style="padding:8px 14px;">Удалить</button>
-                </div>
+              <!-- Dynamic notes container -->
+              <div id="notes-container">
+                <!-- populated dynamically by loadNotes() -->
               </div>
+              <p id="notes-empty" style="display:none;text-align:center;padding:20px;color:#6B7280;">Заметки отсутствуют.</p>
             </div>
           </section>
 
@@ -308,7 +358,7 @@
                 <h3>Приватность</h3>
                 <div style="font-size:14px;">
                   <label style="display:flex;align-items:center;gap:8px;">
-                    <input type="checkbox" checked id="save-history" />
+                    <input type="checkbox" checked id="save-history" onchange="saveSettings()" />
                     Записывать историю запросов и просмотров
                   </label>
                   <label style="display:flex;align-items:center;gap:8px;margin-top:8px;">
@@ -317,7 +367,7 @@
                   </label>
                 </div>
                 <div class="actions">
-                  <button class="btn-secondary">Очистить историю</button>
+                  <button class="btn-secondary" onclick="clearHistoryAPI()">Очистить историю</button>
                 </div>
               </div>
 
@@ -481,6 +531,7 @@
       const on = document.getElementById('high-contrast-toggle').checked;
       document.body.classList.toggle('high-contrast', on);
       localStorage.setItem('highContrast', on ? 'true' : 'false');
+      saveSettings();
       announce('Режим высокого контраста ' + (on ? 'включён' : 'выключен'));
     }
 
@@ -491,6 +542,7 @@
       else if (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
         document.body.classList.add('dark-theme');
       localStorage.setItem('theme', theme);
+      saveSettings();
       announce('Тема изменена');
     }
 
@@ -500,6 +552,7 @@
       if (size === 'small') document.body.classList.add('font-small');
       if (size === 'large') document.body.classList.add('font-large');
       localStorage.setItem('fontSize', size);
+      saveSettings();
       announce('Размер шрифта изменён');
     }
 
@@ -513,7 +566,529 @@
       if (!isOpen) { item.classList.add('open'); button.setAttribute('aria-expanded', 'true'); }
     }
 
+    // ============ ARTICLE AUTOCOMPLETE ============
+    // Sample articles for fallback suggestions
+    const SAMPLE_ARTICLES = [
+      'Статья 1. Общие положения',
+      'Статья 10. Права и обязанности сторон',
+      'Статья 15. Трудовой договор',
+      'Статья 22. Гражданско-правовой договор',
+      'Статья 30. Аренда жилого помещения',
+      'Статья 45. Наследование по закону',
+      'Статья 50. Регистрация юридических лиц',
+      'Статья 67. Административная ответственность',
+      'Статья 78. Уголовная ответственность за хищение',
+      'Статья 100. Налогообложение физических лиц',
+      'Статья 112. Земельный кодекс — использование участков',
+      'Статья 120. Семейный кодекс — расторжение брака',
+      'Статья 135. Трудовой кодекс — рабочее время',
+      'Статья 200. Гражданский кодекс — собственность',
+      'Статья 243. Уголовный кодекс — мошенничество',
+      'Хозяйственный кодекс — предпринимательская деятельность',
+      'Кодекс об административных правонарушениях',
+      'Конституция Республики Беларусь — статья 41',
+      'Закон о труде — статья 5',
+      'Закон об аренде — статья 3',
+    ];
+
+    let autocompleteTimeout = null;
+
+    function setupAutocomplete(inputId, dropdownId) {
+      const input    = document.getElementById(inputId);
+      const dropdown = document.getElementById(dropdownId);
+      if (!input || !dropdown) return;
+
+      input.addEventListener('focus', function() {
+        const q = this.value.trim().toLowerCase();
+        const init = q.length === 0 ? SAMPLE_ARTICLES.slice(0, 6)
+                                    : SAMPLE_ARTICLES.filter(a => a.toLowerCase().includes(q)).slice(0, 6);
+        if (!init.length) return;
+        dropdown.innerHTML = '';
+        init.forEach(title => {
+          const item = document.createElement('div');
+          item.className = 'autocomplete-item';
+          item.textContent = title;
+          item.style.cssText = 'padding:8px 12px;cursor:pointer;font-size:14px;border-bottom:1px solid #f0f0f0;';
+          item.addEventListener('mousedown', e => { e.preventDefault(); input.value = title; dropdown.style.display = 'none'; });
+          item.addEventListener('mouseenter', () => { item.style.background = '#EEF2FF'; });
+          item.addEventListener('mouseleave', () => { item.style.background = ''; });
+          dropdown.appendChild(item);
+        });
+        dropdown.style.display = 'block';
+      });
+
+      input.addEventListener('input', function() {
+        clearTimeout(autocompleteTimeout);
+        const query = this.value.trim();
+
+        autocompleteTimeout = setTimeout(async () => {
+          // Use sample articles as base, then try API
+          let suggestions = SAMPLE_ARTICLES.filter(a =>
+            a.toLowerCase().includes(query.toLowerCase())
+          ).slice(0, 6);
+
+          try {
+            const res = await fetch(`/api/articles/search?q=${encodeURIComponent(query)}`);
+            if (res.ok) {
+              const data = await res.json();
+              const apiTitles = (data.results || []).map(r => r.title).filter(Boolean);
+              suggestions = [...new Set([...apiTitles, ...suggestions])].slice(0, 6);
+            }
+          } catch (_) {}
+
+          if (suggestions.length === 0) { dropdown.style.display = 'none'; return; }
+
+          dropdown.innerHTML = '';
+          suggestions.forEach(title => {
+            const item = document.createElement('div');
+            item.className = 'autocomplete-item';
+            item.textContent = title;
+            item.style.cssText = 'padding:8px 12px;cursor:pointer;font-size:14px;border-bottom:1px solid #f0f0f0;';
+            item.addEventListener('mousedown', (e) => {
+              e.preventDefault();
+              input.value = title;
+              dropdown.style.display = 'none';
+            });
+            item.addEventListener('mouseenter', () => { item.style.background = '#EEF2FF'; });
+            item.addEventListener('mouseleave', () => { item.style.background = ''; });
+            dropdown.appendChild(item);
+          });
+          dropdown.style.display = 'block';
+        }, 250);
+      });
+
+      input.addEventListener('blur', () => {
+        setTimeout(() => { dropdown.style.display = 'none'; }, 200);
+      });
+    }
+
+    // ============ AVATAR UPLOAD ============
+    function handleAvatarUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const dataUrl = e.target.result;
+        localStorage.setItem('userAvatar', dataUrl);
+        applyAvatar(dataUrl);
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function applyAvatar(dataUrl) {
+      const profileImg = document.getElementById('profile-avatar-img');
+      const sidebarImg = document.getElementById('sidebar-avatar');
+      if (profileImg) profileImg.src = dataUrl;
+      if (sidebarImg) sidebarImg.src = dataUrl;
+    }
+
+    // ============ API FUNCTIONS ============
+    const API_BASE = '/api';
+
+    function formatDate(isoDate) {
+      if (!isoDate) return '—';
+      try {
+        const d = new Date(isoDate);
+        return d.toLocaleDateString('ru-RU') + ' ' + d.toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit'});
+      } catch { return isoDate; }
+    }
+
+    // ---- Profile ----
+    let _currentUserType = 'client';
+
+    async function loadProfile() {
+      try {
+        const res = await fetch(`${API_BASE}/profile`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.status === 'Valid' && data.profile) {
+          const p = data.profile;
+          _currentUserType = p.user_type || 'client';
+
+          const nameEl    = document.getElementById('profile-name');
+          const emailEl   = document.getElementById('profile-email');
+          const jurEl     = document.getElementById('profile-jurisdiction');
+          const dispName  = document.getElementById('profile-display-name');
+          const dispJur   = document.getElementById('profile-display-jur');
+          const sideRole  = document.getElementById('sidebar-role');
+          const typeLabel = document.getElementById('profile-type-label');
+          const specBlock = document.getElementById('specialist-fields');
+
+          if (nameEl)   nameEl.value   = p.name  || '';
+          if (emailEl)  emailEl.value  = p.email || '';
+          if (jurEl)    jurEl.value    = p.jurisdiction || 'BY';
+          if (dispName) dispName.textContent = p.name || p.email || '';
+          if (dispJur)  dispJur.textContent  = 'Юрисдикция: ' + (p.jurisdiction || 'BY');
+
+          if (_currentUserType === 'specialist') {
+            if (sideRole)  sideRole.textContent  = 'Специалист';
+            if (typeLabel) typeLabel.textContent  = 'Данные пользователя. Вы зарегистрированы как специалист.';
+            if (specBlock) specBlock.style.display = '';
+
+            const fieldEl = document.getElementById('profile-field');
+            const expEl   = document.getElementById('profile-experience');
+            const genEl   = document.getElementById('profile-gender');
+            const ageEl   = document.getElementById('profile-age');
+            if (fieldEl && p.field)      fieldEl.value = p.field;
+            if (expEl   && p.experience) expEl.value   = p.experience;
+            if (genEl   && p.gender)     genEl.value   = p.gender;
+            if (ageEl   && p.age)        ageEl.value   = p.age;
+          } else {
+            if (sideRole)  sideRole.textContent  = 'Клиент';
+            if (typeLabel) typeLabel.textContent  = 'Основные данные пользователя.';
+            if (specBlock) specBlock.style.display = 'none';
+          }
+        }
+      } catch (e) { console.error('loadProfile:', e); }
+    }
+
+    async function saveProfile() {
+      const payload = {
+        name:         document.getElementById('profile-name')?.value  || '',
+        jurisdiction: document.getElementById('profile-jurisdiction')?.value || 'BY',
+      };
+      if (_currentUserType === 'specialist') {
+        payload.field      = document.getElementById('profile-field')?.value      || '';
+        payload.experience = document.getElementById('profile-experience')?.value || '';
+        payload.gender     = document.getElementById('profile-gender')?.value     || '';
+        payload.age        = document.getElementById('profile-age')?.value        || '';
+      }
+      try {
+        const res = await fetch(`${API_BASE}/profile`, {
+          method: 'PUT',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+          const nameVal = document.getElementById('profile-name')?.value;
+          const jurVal  = document.getElementById('profile-jurisdiction')?.value;
+          const dispName = document.getElementById('profile-display-name');
+          const dispJur  = document.getElementById('profile-display-jur');
+          if (dispName && nameVal) dispName.textContent = nameVal;
+          if (dispJur  && jurVal)  dispJur.textContent  = 'Юрисдикция: ' + jurVal;
+          announce('Профиль сохранён');
+        } else { console.error('saveProfile failed', res.status); }
+      } catch (e) { console.error('saveProfile:', e); }
+    }
+
+    // ---- Settings ----
+    async function loadSettings() {
+      try {
+        const res = await fetch(`${API_BASE}/settings`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.status === 'Valid' && data.settings) {
+          const s = data.settings;
+          const themeEl    = document.getElementById('settings-theme');
+          const fontEl     = document.getElementById('settings-font');
+          const historyEl  = document.getElementById('save-history');
+          const contrastEl = document.getElementById('high-contrast-toggle');
+          if (themeEl)    themeEl.value    = s.theme     || 'system';
+          if (fontEl)     fontEl.value     = s.font_size || 'normal';
+          if (historyEl)  historyEl.checked  = s.save_history  !== false;
+          if (contrastEl) contrastEl.checked = s.high_contrast === true;
+          // Apply loaded theme/font
+          if (themeEl)  changeTheme();
+          if (fontEl)   changeFontSize();
+          if (contrastEl && contrastEl.checked) document.body.classList.add('high-contrast');
+        }
+      } catch (e) { console.error('loadSettings:', e); }
+    }
+
+    async function saveSettings() {
+      const settings = {
+        theme:         document.getElementById('settings-theme')?.value          || 'system',
+        font_size:     document.getElementById('settings-font')?.value           || 'normal',
+        save_history:  document.getElementById('save-history')?.checked          ?? true,
+        high_contrast: document.getElementById('high-contrast-toggle')?.checked  ?? false
+      };
+      try {
+        const res = await fetch(`${API_BASE}/settings`, {
+          method: 'PUT',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(settings)
+        });
+        if (res.ok) { announce('Настройки сохранены'); }
+      } catch (e) { console.error('saveSettings:', e); }
+    }
+
+    // ---- History ----
+    async function loadHistory() {
+      const periodEl = document.getElementById('history-period');
+      const period = periodEl?.value === 'За неделю' ? 'week'
+                   : periodEl?.value === 'За месяц'  ? 'month' : 'all';
+      try {
+        const res = await fetch(`${API_BASE}/history?period=${period}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.status === 'Valid') {
+          renderHistoryFromAPI(data.history || []);
+        }
+      } catch (e) { console.error('loadHistory:', e); }
+    }
+
+    function renderHistoryFromAPI(history) {
+      const tbody = document.getElementById('history-tbody');
+      const emptyMsg = document.getElementById('history-empty');
+      const table = document.getElementById('history-table');
+      if (!tbody) return;
+
+      tbody.innerHTML = '';
+
+      if (history.length === 0) {
+        if (table)    table.style.display    = 'none';
+        if (emptyMsg) emptyMsg.style.display = 'block';
+        return;
+      }
+
+      if (table)    table.style.display    = '';
+      if (emptyMsg) emptyMsg.style.display = 'none';
+
+      history.forEach(h => {
+        const tr = document.createElement('tr');
+        tr.dataset.date = h.date || '';
+        tr.dataset.type = h.type || '';
+        tr.innerHTML = `
+          <td>${formatDate(h.date)}</td>
+          <td>${h.type || '—'}</td>
+          <td>${h.text || '—'}</td>`;
+        tbody.appendChild(tr);
+      });
+      announce('История загружена: ' + history.length + ' записей');
+    }
+
+    async function clearHistoryAPI() {
+      if (!confirm('Очистить всю историю?')) return;
+      try {
+        const res = await fetch(`${API_BASE}/history`, {method: 'DELETE'});
+        if (res.ok) { loadHistory(); announce('История очищена'); }
+      } catch (e) { console.error('clearHistoryAPI:', e); }
+    }
+
+    // ---- Bookmarks ----
+    async function loadBookmarks() {
+      try {
+        const res = await fetch(`${API_BASE}/bookmarks`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.status === 'Valid') {
+          renderBookmarksFromAPI(data.bookmarks || []);
+        }
+      } catch (e) { console.error('loadBookmarks:', e); }
+    }
+
+    function renderBookmarksFromAPI(bookmarks) {
+      const tbody    = document.getElementById('bookmarks-tbody');
+      const emptyMsg = document.getElementById('bookmarks-empty');
+      const table    = document.getElementById('bookmarks-table');
+      if (!tbody) return;
+
+      tbody.innerHTML = '';
+
+      if (bookmarks.length === 0) {
+        if (table)    table.style.display    = 'none';
+        if (emptyMsg) emptyMsg.style.display = 'block';
+        return;
+      }
+
+      if (table)    table.style.display    = '';
+      if (emptyMsg) emptyMsg.style.display = 'none';
+
+      bookmarks.forEach(bm => {
+        const tagSpans = (bm.tags || []).map(t => `<span class="tag">${t}</span>`).join('');
+        const tr = document.createElement('tr');
+        tr.dataset.date = bm.date || '';
+        tr.dataset.name = bm.title || '';
+        tr.dataset.tags = (bm.tags || []).join(',');
+        tr.innerHTML = `
+          <td>${bm.title || bm.article_id || '—'}</td>
+          <td>${tagSpans || '—'}</td>
+          <td>${formatDate(bm.date)}</td>
+          <td>
+            <button class="btn-danger" style="padding:6px 10px;"
+                    onclick="deleteBookmarkAPI('${bm.id}')">✕</button>
+          </td>`;
+        tbody.appendChild(tr);
+      });
+      announce('Закладки загружены: ' + bookmarks.length);
+    }
+
+    async function addBookmarkAPI() {
+      const title = document.getElementById('bm-title-input')?.value?.trim();
+      const tagsRaw = document.getElementById('bm-tags-input')?.value?.trim();
+      if (!title) { alert('Введите название статьи'); return; }
+      const tags = tagsRaw ? tagsRaw.split(',').map(t => t.trim()).filter(Boolean) : [];
+      try {
+        const res = await fetch(`${API_BASE}/bookmarks`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({article_id: title, title, tags})
+        });
+        if (res.ok) {
+          document.getElementById('bm-title-input').value = '';
+          document.getElementById('bm-tags-input').value  = '';
+          loadBookmarks();
+          announce('Закладка добавлена');
+        } else {
+          console.error('addBookmarkAPI failed', res.status);
+        }
+      } catch (e) { console.error('addBookmarkAPI:', e); }
+    }
+
+    async function deleteBookmarkAPI(id) {
+      if (!confirm('Удалить закладку?')) return;
+      try {
+        const res = await fetch(`${API_BASE}/bookmarks?id=${id}`, {method: 'DELETE'});
+        if (res.ok) { loadBookmarks(); announce('Закладка удалена'); }
+      } catch (e) { console.error('deleteBookmarkAPI:', e); }
+    }
+
+    // ---- Notes ----
+    async function loadNotes() {
+      try {
+        const res = await fetch(`${API_BASE}/notes`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.status === 'Valid') {
+          renderNotesFromAPI(data.notes || []);
+        }
+      } catch (e) { console.error('loadNotes:', e); }
+    }
+
+    function renderNotesFromAPI(notes) {
+      const container = document.getElementById('notes-container');
+      const emptyMsg  = document.getElementById('notes-empty');
+      if (!container) return;
+
+      container.innerHTML = '';
+
+      if (notes.length === 0) {
+        if (emptyMsg) emptyMsg.style.display = 'block';
+        return;
+      }
+      if (emptyMsg) emptyMsg.style.display = 'none';
+
+      notes.forEach(n => {
+        const div = document.createElement('div');
+        div.className = 'section';
+        div.style.cssText = 'margin:0 0 12px;border-left:4px solid #4D4FA3;';
+        // Store note data safely on the element (avoids HTML attribute escaping issues)
+        div.dataset.noteId   = n.id;
+        div.dataset.noteText = n.text || '';
+        div.innerHTML = `
+          <h3>${n.article_title || n.article_id || '—'}</h3>
+          <p style="font-size:14px;color:#374151;margin-top:8px;">
+            <strong>Заметка:</strong> ${n.text || ''}
+          </p>
+          <p style="font-size:12px;color:#6B7280;margin-top:4px;">
+            Создано: ${formatDate(n.created_at)} • Обновлено: ${formatDate(n.updated_at)}
+          </p>
+          <div class="actions">
+            <button class="btn-secondary edit-note-btn" style="padding:8px 14px;">Редактировать</button>
+            <button class="btn-danger delete-note-btn" style="padding:8px 14px;">Удалить</button>
+          </div>`;
+        // Attach handlers via addEventListener — safe for any note text content
+        div.querySelector('.edit-note-btn').addEventListener('click', function() {
+          openNoteModal(div.dataset.noteId, div.dataset.noteText);
+        });
+        div.querySelector('.delete-note-btn').addEventListener('click', function() {
+          deleteNoteAPI(div.dataset.noteId);
+        });
+        container.appendChild(div);
+      });
+      announce('Заметки загружены: ' + notes.length);
+    }
+
+    async function addNoteAPI() {
+      const articleTitle = document.getElementById('note-article-input')?.value?.trim();
+      const text         = document.getElementById('note-text-input')?.value?.trim();
+      if (!articleTitle || !text) { alert('Заполните название статьи и текст заметки'); return; }
+      try {
+        const res = await fetch(`${API_BASE}/notes`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({article_id: articleTitle, article_title: articleTitle, text})
+        });
+        if (res.ok) {
+          document.getElementById('note-article-input').value = '';
+          document.getElementById('note-text-input').value    = '';
+          loadNotes();
+          announce('Заметка добавлена');
+        } else {
+          console.error('addNoteAPI failed', res.status);
+        }
+      } catch (e) { console.error('addNoteAPI:', e); }
+    }
+
+    function openNoteModal(id, text) {
+      document.getElementById('edit-note-id').value   = id;
+      document.getElementById('edit-note-text').value = text;
+      const modal = document.getElementById('edit-note-modal');
+      modal.style.display = 'flex';
+    }
+
+    function closeNoteModal() {
+      document.getElementById('edit-note-modal').style.display = 'none';
+    }
+
+    async function saveNoteEdit() {
+      const id   = document.getElementById('edit-note-id').value;
+      const text = document.getElementById('edit-note-text').value;
+      try {
+        const res = await fetch(`${API_BASE}/notes`, {
+          method: 'PUT',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({id, text})
+        });
+        if (res.ok) {
+          closeNoteModal();
+          loadNotes();
+          announce('Заметка сохранена');
+        }
+      } catch (e) { console.error('saveNoteEdit:', e); }
+    }
+
+    function filterNotes() {
+      const searchText    = (document.getElementById('notes-search')?.value  || '').toLowerCase();
+      const articleFilter = (document.getElementById('notes-article')?.value || '').toLowerCase();
+      const container = document.getElementById('notes-container');
+      const emptyMsg  = document.getElementById('notes-empty');
+      let visible = 0;
+      Array.from(container.children).forEach(div => {
+        const noteText     = (div.dataset.noteText || '').toLowerCase();
+        const articleTitle = (div.querySelector('h3')?.textContent || '').toLowerCase();
+        const ok = (!searchText    || noteText.includes(searchText)) &&
+                   (!articleFilter || articleTitle.includes(articleFilter));
+        div.style.display = ok ? '' : 'none';
+        if (ok) visible++;
+      });
+      if (emptyMsg) emptyMsg.style.display = visible === 0 ? 'block' : 'none';
+      announce('Найдено заметок: ' + visible);
+    }
+
+    async function deleteNoteAPI(id) {
+      if (!confirm('Удалить заметку?')) return;
+      try {
+        const res = await fetch(`${API_BASE}/notes?id=${id}`, {method: 'DELETE'});
+        if (res.ok) { loadNotes(); announce('Заметка удалена'); }
+      } catch (e) { console.error('deleteNoteAPI:', e); }
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
+      // Restore saved avatar
+      const savedAvatar = localStorage.getItem('userAvatar');
+      if (savedAvatar) applyAvatar(savedAvatar);
+
+      // Wire article autocomplete dropdowns
+      setupAutocomplete('bm-title-input',     'bm-title-dropdown');
+      setupAutocomplete('note-article-input', 'note-article-dropdown');
+
+      // Load data from API
+      loadProfile();
+      loadSettings();
+      loadHistory();
+      loadBookmarks();
+      loadNotes();
       const contrast = localStorage.getItem('highContrast');
       const toggle = document.getElementById('high-contrast-toggle');
       if (contrast === 'true' && toggle) { toggle.checked = true; document.body.classList.add('high-contrast'); }

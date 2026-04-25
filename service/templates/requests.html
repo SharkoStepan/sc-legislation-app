@@ -5,6 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Запросы - Юридический ассистент</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles/requests.css') }}">
+    <style>
+      .search-autocomplete { position:relative; }
+      .search-dropdown {
+        display:none; position:absolute; top:100%; left:0; right:0; z-index:200;
+        background:#fff; border:1px solid #ddd; border-radius:0 0 8px 8px;
+        box-shadow:0 4px 16px rgba(0,0,0,.12); max-height:240px; overflow-y:auto;
+      }
+      .search-dropdown-item {
+        padding:10px 16px; cursor:pointer; font-size:14px; color:#222349;
+        border-bottom:1px solid #f0f0f0;
+      }
+      .search-dropdown-item:hover { background:#EEF2FF; }
+    </style>
 </head>
 <body>
     <div class="container">
@@ -19,9 +32,20 @@
                 <a href="{{ url_for('main.templates') }}"><button class="nav-button">Шаблоны</button></a>
                 <a href="{{ url_for('main.forum') }}"><button class="nav-button">Форум</button></a>
             </nav>
-            <a href="{{ url_for('main.logout') }}">
-                <img src="{{ url_for('static', filename='images/logout.png') }}" alt="Выйти" class="user-icon">
+            {% if current_user.is_authenticated %}
+            <div style="display:flex;align-items:center;gap:8px;">
+                <a href="{{ url_for('main.cabinet') }}" title="Личный кабинет">
+                    <img src="{{ url_for('static', filename='images/user.png') }}" alt="Личный кабинет" class="user-icon">
+                </a>
+                <a href="{{ url_for('main.logout') }}" title="Выйти">
+                    <img src="{{ url_for('static', filename='images/logout.png') }}" alt="Выйти" class="user-icon">
+                </a>
+            </div>
+            {% else %}
+            <a href="{{ url_for('main.auth') }}">
+                <button class="nav-button">Войти</button>
             </a>
+            {% endif %}
         </header>
 
         <main>
@@ -49,8 +73,10 @@
             {% endwith %}
 
             <form action="{{ url_for('main.requests') }}" method="post" class="search-form">
-                <div class="input-wrapper">
-                    <input type="text" name="request_entry" placeholder="Что такое арендное жилье?" class="search-input">
+                <div class="input-wrapper search-autocomplete">
+                    <input type="text" name="request_entry" id="main-search-input"
+                           placeholder="Что такое арендное жилье?" class="search-input" autocomplete="off">
+                    <div id="main-search-dropdown" class="search-dropdown"></div>
                     <button type="submit" class="search-button">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
                             <path d="M21 21L15 15M17 10C17 13.866 13.866 17 10 17C6.13401 17 3 13.866 3 10C3 6.13401 6.13401 3 10 3C13.866 3 17 6.13401 17 10Z" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -60,6 +86,73 @@
             </form>
         </main>
 
+        <script>
+    const ARTICLES = {{ article_titles | tojson }};
+
+    let _acTimer = null;
+    const searchInput    = document.getElementById('main-search-input');
+    const searchDropdown = document.getElementById('main-search-dropdown');
+
+    function showSearchSuggestions(query) {
+      const q = query.trim().toLowerCase();
+      const suggestions = q.length === 0
+        ? ARTICLES.slice(0, 8)
+        : ARTICLES.filter(a => a.toLowerCase().includes(q)).slice(0, 8);
+      if (!suggestions.length) { searchDropdown.style.display = 'none'; return; }
+      searchDropdown.innerHTML = '';
+      suggestions.forEach(title => {
+        const d = document.createElement('div');
+        d.className = 'search-dropdown-item';
+        d.textContent = title;
+        d.addEventListener('mousedown', e => {
+          e.preventDefault();
+          searchInput.value = title;
+          searchDropdown.style.display = 'none';
+        });
+        searchDropdown.appendChild(d);
+      });
+      searchDropdown.style.display = 'block';
+    }
+
+    searchInput.addEventListener('focus', function() { showSearchSuggestions(this.value); });
+
+    searchInput.addEventListener('input', function() {
+      clearTimeout(_acTimer);
+      const q = this.value.trim();
+      _acTimer = setTimeout(async () => {
+        let suggestions = q.length === 0
+          ? ARTICLES.slice(0, 8)
+          : ARTICLES.filter(a => a.toLowerCase().includes(q.toLowerCase())).slice(0, 8);
+        try {
+          if (q.length >= 2) {
+            const res = await fetch('/api/articles/search?q=' + encodeURIComponent(q));
+            if (res.ok) {
+              const data = await res.json();
+              const apiTitles = (data.results || []).map(r => r.title).filter(Boolean);
+              suggestions = [...new Set([...apiTitles, ...suggestions])].slice(0, 8);
+            }
+          }
+        } catch (_) {}
+        if (!suggestions.length) { searchDropdown.style.display = 'none'; return; }
+        searchDropdown.innerHTML = '';
+        suggestions.forEach(title => {
+          const d = document.createElement('div');
+          d.className = 'search-dropdown-item';
+          d.textContent = title;
+          d.addEventListener('mousedown', e => {
+            e.preventDefault();
+            searchInput.value = title;
+            searchDropdown.style.display = 'none';
+          });
+          searchDropdown.appendChild(d);
+        });
+        searchDropdown.style.display = 'block';
+      }, 150);
+    });
+
+    searchInput.addEventListener('blur', () => { setTimeout(() => { searchDropdown.style.display = 'none'; }, 200); });
+    searchInput.addEventListener('keydown', e => { if (e.key === 'Escape') searchDropdown.style.display = 'none'; });
+        </script>
         <footer>
             <p>Персональный ассистент по юриспруденции</p>
             <p>Ostis 2025</p>

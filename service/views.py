@@ -1,4 +1,4 @@
-from flask import Blueprint ,request ,render_template ,redirect ,url_for ,flash ,session 
+from flask import Blueprint ,request ,render_template ,redirect ,url_for ,flash ,session, jsonify 
 from flask_login import login_user ,logout_user ,login_required ,current_user 
 from sc_client .client import get_link_content ,search_by_template 
 from sc_client .models import ScAddr ,ScIdtfResolveParams ,ScTemplate 
@@ -10,8 +10,9 @@ find_user_by_username ,
 collect_user_info ,
 )
 
-from .utils .string_processing import string_processing 
-from .utils .ostis_utils import get_term_titles ,get_event_by_date 
+from .utils .string_processing import string_processing
+from .utils .ostis_utils import get_term_titles ,get_event_by_date
+from .utils .article_index import search_articles ,get_article ,get_all_titles
 from .services import (
 auth_agent ,
 reg_agent ,
@@ -19,7 +20,21 @@ user_request_agent ,
 directory_agent ,
 add_event_agent ,
 delete_event_agent ,
-show_event_agent 
+show_event_agent,
+get_user_profile,
+update_user_profile,
+get_user_settings,
+update_user_settings,
+get_user_history,
+add_user_history_entry,
+clear_user_history,
+get_user_bookmarks,
+add_user_bookmark,
+delete_user_bookmark,
+get_user_notes,
+add_user_note,
+update_user_note,
+delete_user_note
 )
 
 from .forms import LoginForm ,RegistrationForm ,AddEventForm 
@@ -42,6 +57,29 @@ from service .agents .ostis import Ostis ,result
 
 
 main =Blueprint ("main",__name__ )
+
+# Endpoints accessible without login or guest mode
+_PUBLIC_ENDPOINTS = {
+    'main.auth', 'main.reg', 'main.verification',
+    'main.resend_code', 'main.guest_mode', 'main.logout',
+    'static',
+}
+
+@main .before_request
+def require_auth_or_guest ():
+    """Redirect to login unless authenticated or guest session is active."""
+    if request .endpoint in _PUBLIC_ENDPOINTS or request .endpoint is None :
+        return
+    if not current_user .is_authenticated and not session .get ('guest_mode'):
+        return redirect (url_for ('main.auth'))
+
+
+@main .route ('/guest_mode')
+def guest_mode ():
+    """Start a read-only guest session."""
+    session ['guest_mode']=True
+    return redirect (url_for ('main.requests'))
+
 
 @main .route ("/index")
 @login_required 
@@ -272,16 +310,17 @@ def delete_event ():
     return redirect (url_for ('main.show_calendar',selected_date =selected_date ))
 
 @main .route ("/requests",methods =['GET','POST'])
-@login_required 
 def requests ():
     """
     Метод для реализации эндпоинта юридических запросов
     :return: Разметка страницы
     """
+    _article_titles =get_all_titles ()
     if request .method =='POST':
         content =request .form .get ("request_entry")
         if content =='':
             flash (f"Для поиска по справочнику требуется ввести текст",category ="empty-text-error")
+            return render_template ("requests.html",article_titles =_article_titles )
     else :
         content =request .args .get ('q')
 
@@ -292,36 +331,64 @@ def requests ():
         all_queries =[]
 
         for term in processed_terms :
-            response =user_request_agent (content =term )
-            if response ["message"]is not None :
-                try :
-                    if len (response ["message"])==0 :
-                        flash (f"По вашему запросу ничего не найдено",category ="empty-result-error")
-                        return render_template ("requests.html")
-                    results =[{
-                    'term':item .term ,
-                    'content':item .content ,
-                    'related_concepts':item .related_concepts ,
-                    'related_articles':item .related_articles 
-                    }for item in response ["message"]]
-                except AttributeError as e :
-                    print (f"Ошибка формата данных: {e }")
-                    results =[]
+            try :
+                response =user_request_agent (content =term )
+            except Exception as _req_err :
+                print (f"[REQUESTS] agent error for term={term!r}: {_req_err}")
+                flash ("Ошибка при обращении к системе. Попробуйте позже.",category ="empty-result-error")
+                return render_template ("requests.html",article_titles =_article_titles )
 
-                all_results .extend (results )
-                all_queries .append (term )
+            msg =response .get ("message")
+            if not isinstance (msg ,list ):
+                # agent returned None or non-list (timeout / not connected)
+                continue
+
+            if len (msg )==0 :
+                # agent responded but found nothing for this term — keep trying other terms
+                continue
+
+            try :
+                results =[{
+                'term':item .term ,
+                'content':item .content ,
+                'related_concepts':item .related_concepts ,
+                'related_articles':item .related_articles
+                }for item in msg ]
+            except AttributeError as e :
+                print (f"Ошибка формата данных: {e }")
+                results =[]
+
+            all_results .extend (results )
+            all_queries .append (term )
 
         if all_results :
             session ['search_query']=", ".join (all_queries )
-            session ['search_results']=all_results 
+            session ['search_results']=all_results
+            if current_user .is_authenticated :
+                try :
+                    add_user_history_entry (get_user_login_from_current_user (),'search',session ['search_query'])
+                except Exception as _he :
+                    print (f"[history] {_he }")
             return redirect (url_for ('main.requests_results'))
 
-        return render_template ("requests.html")
+        # OSTIS agent returned nothing — fall back to KB file search
+        fallback =search_articles (content )
+        if fallback :
+            session ['search_query']=content
+            session ['search_results']=fallback
+            if current_user .is_authenticated :
+                try :
+                    add_user_history_entry (get_user_login_from_current_user (),'search',content )
+                except Exception as _he :
+                    print (f"[history] {_he }")
+            return redirect (url_for ('main.requests_results'))
 
-    return render_template ("requests.html")
+        flash (f"По вашему запросу ничего не найдено",category ="empty-result-error")
+        return render_template ("requests.html",article_titles =_article_titles )
+
+    return render_template ("requests.html",article_titles =_article_titles )
 
 @main .route ("/requests_results")
-@login_required 
 def requests_results ():
     """
     Метод для реализации эндпоинта просмотра результатов юридических запросов
@@ -334,8 +401,23 @@ def requests_results ():
     query =query ,
     results =results )
 
+@main .route ("/article/<article_id>")
+def article_view (article_id ):
+    """Просмотр полного текста статьи из базы знаний."""
+    article =get_article (article_id )
+    if article is None :
+        flash ("Статья не найдена",category ="empty-result-error")
+        return redirect (url_for ('main.requests'))
+    referrer =request .referrer
+    return render_template (
+        "article.html",
+        article_id =article ['id'],
+        title =article ['title'],
+        content =article ['content'],
+        referrer =referrer ,
+    )
+
 @main .route ("/directory",methods =['GET','POST'])
-@login_required 
 def directory ():
     """
     Метод для реализации эндпоинта поиска
@@ -361,7 +443,6 @@ def directory ():
     return render_template ("directory.html",term_titles =term_titles )
 
 @main .route ("/directory_results")
-@login_required 
 def directory_results ():
     """
     Метод для реализации эндпоинта просмотра результатов поиска
@@ -372,7 +453,6 @@ def directory_results ():
     return render_template ("directory-results.html",query =query ,results =results )
 
 @main .route ("/templates")
-@login_required 
 def templates ():
     """
     Метод для реализации эндпоинта шаблонов
@@ -786,3 +866,161 @@ def forum_rate_message(topic_addr, message_addr):
 @login_required
 def cabinet():
     return render_template('cabinet.html', user=current_user)
+
+
+# ============================================================================
+# CABINET API ENDPOINTS
+# ============================================================================
+
+@main.route('/api/profile', methods=['GET'])
+@login_required
+def api_get_profile():
+    """API: Получить профиль пользователя"""
+    user_email = get_user_login_from_current_user()
+    result = get_user_profile(user_email)
+    return jsonify(result)
+
+
+@main.route('/api/profile', methods=['PUT'])
+@login_required
+def api_update_profile():
+    """API: Обновить профиль пользователя"""
+    user_email = get_user_login_from_current_user()
+    data = request.get_json()
+    result = update_user_profile(user_email, data)
+    return jsonify(result)
+
+
+@main.route('/api/settings', methods=['GET'])
+@login_required
+def api_get_settings():
+    """API: Получить настройки пользователя"""
+    user_email = get_user_login_from_current_user()
+    result = get_user_settings(user_email)
+    return jsonify(result)
+
+
+@main.route('/api/settings', methods=['PUT'])
+@login_required
+def api_update_settings():
+    """API: Обновить настройки пользователя"""
+    user_email = get_user_login_from_current_user()
+    settings = request.get_json()
+    result = update_user_settings(user_email, settings)
+    return jsonify(result)
+
+
+@main.route('/api/history', methods=['GET'])
+@login_required
+def api_get_history():
+    """API: Получить историю запросов"""
+    user_email = get_user_login_from_current_user()
+    period = request.args.get('period', 'week')
+    result = get_user_history(user_email, period)
+    return jsonify(result)
+
+
+@main.route('/api/history', methods=['DELETE'])
+@login_required
+def api_clear_history():
+    """API: Очистить историю"""
+    user_email = get_user_login_from_current_user()
+    result = clear_user_history(user_email)
+    return jsonify(result)
+
+
+@main.route('/api/bookmarks', methods=['GET'])
+@login_required
+def api_get_bookmarks():
+    """API: Получить закладки"""
+    user_email = get_user_login_from_current_user()
+    result = get_user_bookmarks(user_email)
+    return jsonify(result)
+
+
+@main.route('/api/bookmarks', methods=['POST'])
+@login_required
+def api_add_bookmark():
+    """API: Добавить закладку"""
+    user_email = get_user_login_from_current_user()
+    data = request.get_json()
+    result = add_user_bookmark(
+        user_email,
+        data.get('article_id'),
+        data.get('title'),
+        data.get('tags', [])
+    )
+    return jsonify(result)
+
+
+@main.route('/api/bookmarks', methods=['DELETE'])
+@login_required
+def api_delete_bookmark():
+    """API: Удалить закладку"""
+    user_email = get_user_login_from_current_user()
+    bookmark_id = request.args.get('id')
+    result = delete_user_bookmark(user_email, bookmark_id)
+    return jsonify(result)
+
+
+@main.route('/api/notes', methods=['GET'])
+@login_required
+def api_get_notes():
+    """API: Получить заметки"""
+    user_email = get_user_login_from_current_user()
+    result = get_user_notes(user_email)
+    return jsonify(result)
+
+
+@main.route('/api/notes', methods=['POST'])
+@login_required
+def api_add_note():
+    """API: Добавить заметку"""
+    user_email = get_user_login_from_current_user()
+    data = request.get_json()
+    result = add_user_note(
+        user_email,
+        data.get('article_id'),
+        data.get('article_title'),
+        data.get('text')
+    )
+    return jsonify(result)
+
+
+@main.route('/api/notes', methods=['PUT'])
+@login_required
+def api_update_note():
+    """API: Обновить заметку"""
+    user_email = get_user_login_from_current_user()
+    data = request.get_json()
+    result = update_user_note(user_email, data.get('id'), data.get('text'))
+    return jsonify(result)
+
+
+@main.route('/api/notes', methods=['DELETE'])
+@login_required
+def api_delete_note():
+    """API: Удалить заметку"""
+    user_email = get_user_login_from_current_user()
+    note_id = request.args.get('id')
+    result = delete_user_note(user_email, note_id)
+    return jsonify(result)
+
+
+@main.route('/api/articles/search', methods=['GET'])
+def api_search_articles():
+    """API: Поиск статей для автодополнения"""
+    query = request.args.get('q', '')
+    if len(query) < 2:
+        return jsonify({'results': []})
+
+    matches = search_articles(query, limit=10)
+    articles = [
+        {
+            'title': item['title'],
+            'content': item['content'][:100] + '...' if len(item['content']) > 100 else item['content'],
+            'url': url_for('main.article_view', article_id=item['id']),
+        }
+        for item in matches
+    ]
+    return jsonify({'results': articles})

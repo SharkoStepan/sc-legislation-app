@@ -12,7 +12,8 @@ import sc_client .client as client
 from .agents .ostis import OstisVerificationAgent 
 
 
-from .agents .ostis import OstisAuthAgent ,OstisRegAgent ,OstisVerificationAgent 
+from .agents .ostis import OstisAuthAgent ,OstisRegAgent ,OstisVerificationAgent
+from .agents.ostis import OstisProfileAgent, OstisHistoryAgent, OstisBookmarksAgent, OstisNotesAgent 
 
 
 auth_agent_instance =OstisAuthAgent ()
@@ -172,3 +173,93 @@ def test_agent_update_rating (user_id :str ):
     """Обновить рейтинг пользователя"""
     agent =current_app .config ['agents']['test_agent']
     return agent .update_rating (user_id )
+
+
+# ============================================================================
+# CABINET SERVICES - Profile, History, Bookmarks, Notes
+# ============================================================================
+
+# Initialize cabinet agents
+profile_agent_instance = OstisProfileAgent()
+history_agent_instance = OstisHistoryAgent()
+bookmarks_agent_instance = OstisBookmarksAgent()
+notes_agent_instance = OstisNotesAgent()
+
+
+# Profile services
+def get_user_profile(user_email: str):
+    """Получить профиль пользователя"""
+    return profile_agent_instance.get_profile(user_email)
+
+
+def update_user_profile(user_email: str, data: dict):
+    """Обновить профиль пользователя"""
+    return profile_agent_instance.update_profile(user_email, data)
+
+
+def get_user_settings(user_email: str):
+    """Получить настройки пользователя"""
+    return profile_agent_instance.get_settings(user_email)
+
+
+def update_user_settings(user_email: str, settings: dict):
+    """Обновить настройки пользователя"""
+    return profile_agent_instance.update_settings(user_email, settings)
+
+
+# History services
+def get_user_history(user_email: str, period: str = 'week'):
+    """Получить историю запросов пользователя"""
+    return history_agent_instance.get_history(user_email, period)
+
+
+def add_user_history_entry(user_email: str, query_type: str, query_text: str, article_id: str = None):
+    """Добавить запись в историю"""
+    return history_agent_instance.add_history_entry(user_email, query_type, query_text, article_id)
+
+
+def clear_user_history(user_email: str):
+    """Очистить историю пользователя"""
+    return history_agent_instance.clear_history(user_email)
+
+
+# Bookmarks services
+def get_user_bookmarks(user_email: str):
+    """Получить закладки пользователя"""
+    return bookmarks_agent_instance.get_bookmarks(user_email)
+
+
+def add_user_bookmark(user_email: str, article_id: str, title: str, tags: list = None):
+    """Добавить закладку"""
+    return bookmarks_agent_instance.add_bookmark(user_email, article_id, title, tags)
+
+
+def update_user_bookmark(user_email: str, bookmark_id: str, tags: list = None):
+    """Обновить закладку"""
+    return bookmarks_agent_instance.update_bookmark(user_email, bookmark_id, tags)
+
+
+def delete_user_bookmark(user_email: str, bookmark_id: str):
+    """Удалить закладку"""
+    return bookmarks_agent_instance.delete_bookmark(user_email, bookmark_id)
+
+
+# Notes services
+def get_user_notes(user_email: str):
+    """Получить заметки пользователя"""
+    return notes_agent_instance.get_notes(user_email)
+
+
+def add_user_note(user_email: str, article_id: str, article_title: str, text: str):
+    """Добавить заметку"""
+    return notes_agent_instance.add_note(user_email, article_id, article_title, text)
+
+
+def update_user_note(user_email: str, note_id: str, text: str):
+    """Обновить заметку"""
+    return notes_agent_instance.update_note(user_email, note_id, text)
+
+
+def delete_user_note(user_email: str, note_id: str):
+    """Удалить заметку"""
+    return notes_agent_instance.delete_note(user_email, note_id)
