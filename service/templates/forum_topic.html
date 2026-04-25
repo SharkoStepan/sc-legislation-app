@@ -29,20 +29,81 @@
             <div class="topic-detail">
                 <h1>{{ topic.title }}</h1>
                 <p class="topic-meta">Автор: <strong>{{ topic.author }}</strong></p>
-                <div class="topic-description">
-                    {{ topic.description }}
-                </div>
+                <div class="topic-description">{{ topic.description }}</div>
+            </div>
+
+            <div class="filter-panel">
+                <form method="GET" action="" class="filter-form">
+                    <input type="hidden" name="sort_type" value="{{ current_sort }}">
+                    <div class="filter-group">
+                        <label class="filter-label">Автор:</label>
+                        <select name="filter_author" class="filter-select" onchange="this.form.submit()">
+                            <option value="">Все</option>
+                            {% for author in authors %}
+                                <option value="{{ author }}" {% if filter_author == author %}selected{% endif %}>
+                                    {{ author }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label class="filter-toggle">
+                            <input type="checkbox" name="filter_best" value="true"
+                                   {% if filter_best == 'true' %}checked{% endif %}
+                                   onchange="this.form.submit()">
+                            <span>Только лучшие</span>
+                        </label>
+                    </div>
+                    <div class="filter-group">
+                        <label class="filter-toggle">
+                            <input type="checkbox" name="filter_experts" value="true"
+                                   {% if filter_experts == 'true' %}checked{% endif %}
+                                   onchange="this.form.submit()">
+                            <span>Только эксперты</span>
+                        </label>
+                    </div>
+                    {% if filter_author or filter_best == 'true' or filter_experts == 'true' %}
+                        <a href="?sort_type={{ current_sort }}" class="filter-reset">✕ Сбросить</a>
+                    {% endif %}
+                </form>
             </div>
 
             <div class="messages-section">
-                <h2>Сообщения ({{ messages|length }})</h2>
+                <div class="messages-header">
+                    <h2>Сообщения ({{ messages|length }})</h2>
+                    <div class="sort-controls">
+                        <span class="sort-label">Сортировка:</span>
+                        <a href="?sort_type=by_date&filter_author={{ filter_author }}&filter_best={{ filter_best }}&filter_experts={{ filter_experts }}"
+                           class="sort-btn {% if current_sort == 'by_date' or not current_sort %}active{% endif %}">По дате</a>
+                        <a href="?sort_type=by_rating&filter_author={{ filter_author }}&filter_best={{ filter_best }}&filter_experts={{ filter_experts }}"
+                           class="sort-btn {% if current_sort == 'by_rating' %}active{% endif %}">По рейтингу</a>
+                    </div>
+                </div>
 
                 <div class="messages-list">
                     {% if messages %}
                         {% for message in messages %}
-                            <div class="message-card">
+                            <div class="message-card {% if message.addr == best_message_addr %}best-message{% endif %}"
+                                 id="message-{{ message.addr }}">
+
+                                {% if message.addr == best_message_addr %}
+                                    <div class="best-badge">⭐ Лучший ответ</div>
+                                {% endif %}
+
+                                {% if message.get('is_expert') %}
+                                    <div class="expert-badge">⚖️ Эксперт</div>
+                                {% endif %}
+
                                 <div class="message-author">{{ message.author }}</div>
                                 <div class="message-text">{{ message.content }}</div>
+
+                                {% if message.image_base64 %}
+                                    <div class="message-image">
+                                        <img src="data:{{ message.image_mime }};base64,{{ message.image_base64 }}"
+                                             alt="Вложение" onclick="openLightbox(this.src)">
+                                    </div>
+                                {% endif %}
+
                                 <div class="message-rating">
                                     <button class="rate-btn like-btn"
                                             data-message="{{ message.addr }}"
@@ -59,6 +120,19 @@
                                         👎 <span class="dislike-count">{{ message.dislikes }}</span>
                                     </button>
                                 </div>
+
+                                {% if current_user.username in message.author or message.author in current_user.username %}
+                                    <div class="message-actions"
+                                         data-addr="{{ message.addr }}"
+                                         data-content="{{ message.content | e }}">
+                                        <button type="button" class="btn-icon edit"
+                                                title="Редактировать"
+                                                onclick="startEdit(this)">✏️</button>
+                                        <button type="button" class="btn-icon delete"
+                                                title="Удалить"
+                                                onclick="deleteMessage(this)">🗑️</button>
+                                    </div>
+                                {% endif %}
                             </div>
                         {% endfor %}
                     {% else %}
@@ -72,15 +146,36 @@
                     {% with messages = get_flashed_messages(with_categories=true) %}
                         {% if messages %}
                             {% for category, message in messages %}
-                                <div class="alert alert-{{ category }}">
-                                    {{ message }}
-                                </div>
+                                <div class="alert alert-{{ category }}">{{ message }}</div>
                             {% endfor %}
                         {% endif %}
                     {% endwith %}
 
-                    <form action="{{ url_for('main.forum_add_message', topic_addr=topic_addr) }}" method="POST">
-                        <textarea name="message" class="form-control" rows="4" placeholder="Ваше сообщение..." required></textarea>
+                    <form action="{{ url_for('main.forum_add_message', topic_addr=topic_addr) }}"
+                          method="POST" enctype="multipart/form-data">
+
+                        <input type="file" id="imageInput" name="image" accept="image/*"
+                               style="display:none" onchange="handlePhotoSelect(this)">
+
+                        <div class="textarea-wrapper">
+                            <div class="attach-thumb" id="attachThumb">
+                                <img id="previewImg" src="" alt="Фото">
+                                <button type="button" class="thumb-remove"
+                                        onclick="removePhoto()" title="Убрать фото">✕</button>
+                            </div>
+
+                            <div class="autocomplete-wrapper">
+                                <div class="autocomplete-ghost" id="ghost" aria-hidden="true"></div>
+                                <textarea name="message" id="messageInput" class="form-control"
+                                          rows="4" placeholder="Ваше сообщение..."
+                                          required autocomplete="off" spellcheck="true"></textarea>
+                            </div>
+
+                            <button type="button" class="attach-btn" id="attachBtn"
+                                    title="Прикрепить фото"
+                                    onclick="document.getElementById('imageInput').click()">📎</button>
+                        </div>
+
                         <button type="submit" class="btn-primary">Отправить</button>
                     </form>
                 </div>
@@ -93,63 +188,17 @@
         </footer>
     </div>
 
+    <div class="lightbox" id="lightbox" onclick="closeLightbox()">
+        <span class="lightbox-close" onclick="closeLightbox()">×</span>
+        <img id="lightbox-img" src="" alt="Изображение">
+    </div>
+
     <script>
-        function applyVote(likeBtn, dislikeBtn, votedType) {
-            if (votedType === 'like') {
-                dislikeBtn.dataset.voted = 'true';
-                likeBtn.dataset.voted = 'true';
-                dislikeBtn.style.opacity = '0.4';
-                dislikeBtn.style.cursor = 'not-allowed';
-                dislikeBtn.style.filter = 'grayscale(100%)';
-            } else if (votedType === 'dislike') {
-                likeBtn.dataset.voted = 'true';
-                dislikeBtn.dataset.voted = 'true';
-                likeBtn.style.opacity = '0.4';
-                likeBtn.style.cursor = 'not-allowed';
-                likeBtn.style.filter = 'grayscale(100%)';
-            }
-        }
-
-        document.querySelectorAll('.message-rating').forEach(rating => {
-            const likeBtn = rating.querySelector('.like-btn');
-            const dislikeBtn = rating.querySelector('.dislike-btn');
-
-            // Восстанавливаем состояние при загрузке страницы
-            const existingVote = likeBtn.dataset.voted;
-            if (existingVote && existingVote !== '') {
-                applyVote(likeBtn, dislikeBtn, existingVote);
-            }
-
-            async function sendRate(btn, oppositeBtn, ratingType, messageAddr, topicAddr) {
-                if (likeBtn.dataset.voted === 'true' || likeBtn.dataset.voted === 'like' || likeBtn.dataset.voted === 'dislike') return;
-
-                const response = await fetch(
-                    `/forum/topic/${topicAddr}/message/${messageAddr}/rate`,
-                    {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-                        body: `rating_type=${ratingType}`
-                    }
-                );
-
-                const data = await response.json();
-
-                if (response.ok && data.status === 'ok') {
-                    const span = btn.querySelector(ratingType === 'like' ? '.like-count' : '.dislike-count');
-                    span.textContent = parseInt(span.textContent) + 1;
-                    applyVote(likeBtn, dislikeBtn, ratingType);
-                }
-            }
-
-            likeBtn.addEventListener('click', function() {
-                sendRate(likeBtn, dislikeBtn, 'like', likeBtn.dataset.message, likeBtn.dataset.topic);
-            });
-
-            dislikeBtn.addEventListener('click', function() {
-                sendRate(dislikeBtn, likeBtn, 'dislike', dislikeBtn.dataset.message, dislikeBtn.dataset.topic);
-            });
-        });
+        const TOPIC_MESSAGES = {{ messages | map(attribute='content') | list | tojson }};
+        const TOPIC_META = {{ (topic.title ~ ' ' ~ topic.description) | tojson }};
     </script>
-
+    <script src="{{ url_for('static', filename='js/ru_words.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/forum_topic.js') }}"></script>
+    <script>initAutocomplete(TOPIC_MESSAGES, TOPIC_META);</script>
 </body>
 </html>

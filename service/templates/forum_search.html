@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Поиск по темам — Юридический ассистент</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles/style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles/forum.css') }}">
+</head>
+<body>
+
+<nav>
+  <a href="{{ url_for('main.index') }}">
+    <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Логотип">
+  </a>
+  <ul>
+    <li><a href="{{ url_for('main.requests') }}">Запросы</a></li>
+    <li><a href="{{ url_for('main.directory') }}">Справочник</a></li>
+    <li><a href="{{ url_for('main.show_calendar') }}">Календарь</a></li>
+    <li><a href="{{ url_for('main.templates') }}">Шаблоны</a></li>
+    <li><a href="{{ url_for('main.forum') }}" class="active">Форум</a></li>
+  </ul>
+  <a href="{{ url_for('main.cabinet') }}">
+    <img src="{{ url_for('static', filename='images/Account.png') }}" alt="Профиль">
+  </a>
+</nav>
+
+<main class="forum-container">
+  <div class="forum-header">
+    <h1>Поиск по темам</h1>
+    <a href="{{ url_for('main.forum') }}" class="btn-back">← Назад к форуму</a>
+  </div>
+
+  <form method="POST" action="{{ url_for('main.forum_search') }}" class="search-form">
+    <div class="search-bar">
+      <input
+        type="text"
+        name="search_query"
+        value="{{ query }}"
+        placeholder="Введите поисковый запрос..."
+        autofocus
+      >
+      <button type="submit">
+        <img src="{{ url_for('static', filename='images/search.png') }}" alt="Поиск">
+      </button>
+    </div>
+  </form>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <div class="alert {{ category }}">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  {% if query %}
+    <p class="search-meta">
+      Результаты по запросу: <strong>{{ query }}</strong> — найдено {{ results|length }}
+    </p>
+
+    {% if results %}
+      <div class="topics-list">
+        {% for topic in results %}
+          <div class="topic-card">
+            <a href="{{ url_for('main.forum_topic', topicaddr=topic.addr) }}">
+              {{ topic.title | highlight(query) }}
+            </a>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="no-results">Темы не найдены. Попробуйте другой запрос.</p>
+    {% endif %}
+  {% endif %}
+</main>
+
+</body>
+</html>

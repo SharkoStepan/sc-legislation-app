@@ -43,22 +43,39 @@
                 </a>
             </div>
 
+            <!-- Поисковая строка -->
+            <div class="forum-search-wrapper">
+                <div class="forum-search-bar">
+                    <img src="{{ url_for('static', filename='images/search.png') }}" alt="Поиск" class="search-icon">
+                    <input
+                        type="text"
+                        id="forum-search-input"
+                        placeholder="Поиск по темам..."
+                        autocomplete="off"
+                    >
+                    <button id="forum-search-clear" class="search-clear" style="display:none">✕</button>
+                </div>
+                <div id="search-status" class="search-status"></div>
+            </div>
+
             {% with messages = get_flashed_messages(with_categories=true) %}
                 {% if messages %}
                     {% for category, message in messages %}
-                        <div class="alert alert-{{ category }}">
-                            {{ message }}
-                        </div>
+                        <div class="alert alert-{{ category }}">{{ message }}</div>
                     {% endfor %}
                 {% endif %}
             {% endwith %}
 
-            <div class="topics-container">
+            <!-- Список тем -->
+            <div class="topics-container" id="topics-container">
                 {% if topics %}
                     {% for topic in topics %}
-                        <a href="{{ url_for('main.forum_topic', topic_addr=topic.addr) }}" class="topic-card">
+                        <a href="{{ url_for('main.forum_topic', topic_addr=topic.addr) }}"
+                           class="topic-card"
+                           data-title="{{ topic.title | lower }}"
+                           data-author="{{ topic.author | lower }}">
                             <div class="topic-header">
-                                <h3>{{ topic.title }}</h3>
+                                <h3 class="topic-title-text">{{ topic.title }}</h3>
                             </div>
                             <p class="topic-author">Автор: {{ topic.author }}</p>
                         </a>
@@ -72,6 +89,13 @@
                     </div>
                 {% endif %}
             </div>
+
+            <!-- Блок результатов поиска (скрыт по умолчанию) -->
+            <div id="search-results-container" class="topics-container" style="display:none"></div>
+
+            <div id="no-results" class="empty-state" style="display:none">
+                <p>Темы не найдены по запросу "<span id="no-results-query"></span>"</p>
+            </div>
         </main>
 
         <footer>
@@ -79,5 +103,94 @@
             <p>Ostis 2025</p>
         </footer>
     </div>
+
+    <script>
+        const input = document.getElementById('forum-search-input');
+        const clearBtn = document.getElementById('forum-search-clear');
+        const status = document.getElementById('search-status');
+        const topicsContainer = document.getElementById('topics-container');
+        const searchResultsContainer = document.getElementById('search-results-container');
+        const noResults = document.getElementById('no-results');
+        const noResultsQuery = document.getElementById('no-results-query');
+
+        let debounceTimer = null;
+
+        function highlight(text, query) {
+            if (!query) return text;
+            const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            return text.replace(new RegExp(`(${escaped})`, 'gi'),
+                '<mark class="search-highlight">$1</mark>');
+        }
+
+        function showAllTopics() {
+            topicsContainer.style.display = '';
+            searchResultsContainer.style.display = 'none';
+            searchResultsContainer.innerHTML = '';
+            noResults.style.display = 'none';
+            status.textContent = '';
+            clearBtn.style.display = 'none';
+        }
+
+        function performSearch(query) {
+            if (!query.trim()) {
+                showAllTopics();
+                return;
+            }
+
+            clearBtn.style.display = 'block';
+            status.textContent = 'Поиск...';
+            status.className = 'search-status searching';
+
+            fetch(`/api/forum/search?q=${encodeURIComponent(query)}`)
+                .then(r => r.json())
+                .then(data => {
+                    topicsContainer.style.display = 'none';
+                    searchResultsContainer.innerHTML = '';
+
+                    if (data.results && data.results.length > 0) {
+                        noResults.style.display = 'none';
+                        searchResultsContainer.style.display = '';
+                        status.textContent = `Найдено: ${data.results.length}`;
+                        status.className = 'search-status found';
+
+                        data.results.forEach(topic => {
+                            const card = document.createElement('a');
+                            card.href = `/forum/topic/${topic.addr}`;
+                            card.className = 'topic-card';
+                            card.innerHTML = `
+                                <div class="topic-header">
+                                    <h3 class="topic-title-text">${highlight(topic.title, query)}</h3>
+                                </div>
+                                <p class="topic-author">Автор: ${topic.author || ''}</p>
+                            `;
+                            searchResultsContainer.appendChild(card);
+                        });
+                    } else {
+                        searchResultsContainer.style.display = 'none';
+                        noResults.style.display = '';
+                        noResultsQuery.textContent = query;
+                        status.textContent = 'Не найдено';
+                        status.className = 'search-status not-found';
+                    }
+                })
+                .catch(() => {
+                    status.textContent = 'Ошибка поиска';
+                    status.className = 'search-status error';
+                });
+        }
+
+        input.addEventListener('input', () => {
+            clearTimeout(debounceTimer);
+            const q = input.value.trim();
+            if (!q) { showAllTopics(); return; }
+            debounceTimer = setTimeout(() => performSearch(q), 400);
+        });
+
+        clearBtn.addEventListener('click', () => {
+            input.value = '';
+            showAllTopics();
+            input.focus();
+        });
+    </script>
 </body>
 </html>

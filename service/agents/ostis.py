@@ -521,6 +521,51 @@ def callback_check_answer (src :ScAddr ,connector :ScAddr ,trg :ScAddr ):
 
     return result .SUCCESS 
 
+def callback_filter_messages(src: ScAddr, connector: ScAddr, trg: ScAddr):
+    global payload
+    callback_event.clear()
+
+    succ_node = client.resolve_keynodes(
+        ScIdtfResolveParams(idtf='action_finished_successfully', type=sc_types.NODE_CONST_CLASS)
+    )[0]
+    unsucc_node = client.resolve_keynodes(
+        ScIdtfResolveParams(idtf='action_finished_unsuccessfully', type=sc_types.NODE_CONST_CLASS)
+    )[0]
+    node_err = client.resolve_keynodes(
+        ScIdtfResolveParams(idtf='action_finished_with_error', type=sc_types.NODE_CONST_CLASS)
+    )[0]
+
+    if trg.value == succ_node.value:
+        nrel_result = client.resolve_keynodes(
+            ScIdtfResolveParams(idtf='nrel_result', type=sc_types.NODE_CONST_CLASS)
+        )[0]
+
+        res_templ = ScTemplate()
+        res_templ.triple_with_relation(
+            src,
+            sc_types.EDGE_D_COMMON_VAR,
+            sc_types.NODE_VAR_STRUCT >> "_res_struct",
+            sc_types.EDGE_ACCESS_VAR_POS_PERM,
+            nrel_result
+        )
+        res_templ.triple(
+            "_res_struct",
+            sc_types.EDGE_ACCESS_VAR_POS_PERM,
+            sc_types.NODE_VAR >> "_message"
+        )
+
+        results = client.template_search(res_templ)
+        expert_addrs = set()
+        for r in results:
+            expert_addrs.add(r.get("_message").value)
+
+        payload = {"message": result.SUCCESS, "expert_addrs": expert_addrs}
+
+    elif trg.value == unsucc_node.value or trg.value == node_err.value:
+        payload = {"message": result.FAILURE, "expert_addrs": set()}
+
+    callback_event.set()
+
 class Ostis :
     """
     Класс для представления OSTIS-системы
@@ -1554,68 +1599,288 @@ class Ostis :
             raise ScServerError ()
 
 
-    def call_add_message_agent (self ,action_name :str ,username :str ,topic_addr :ScAddr ,message_text :str ):
-        """Добавляет сообщение в топик"""
-        if is_connected ():
-            from service .models import get_user_by_login 
-            user =get_user_by_login (username )
-            if not user :
-                raise Exception (f"User not found: {username }")
+    def call_add_message_agent(self, action_name: str, username: str, topic_addr: ScAddr,
+                           message_text: str, image_base64: str = None,
+                           image_name: str = None, image_mime: str = None):
+        if is_connected():
+            from service.models import get_user_by_login
+            user_sc_addr = get_user_by_login(username)  # ← уже возвращает ScAddr
+            if not user_sc_addr:
+                raise Exception(f"User SC node not found: {username}")
 
+            message_link = create_link(client, message_text)
 
-            message_link =create_link (client ,message_text )
+            rrel_1 = client.resolve_keynodes(ScIdtfResolveParams(idtf="rrel_1", type=sc_types.NODE_CONST_ROLE))[0]
+            rrel_2 = client.resolve_keynodes(ScIdtfResolveParams(idtf="rrel_2", type=sc_types.NODE_CONST_ROLE))[0]
+            rrel_3 = client.resolve_keynodes(ScIdtfResolveParams(idtf="rrel_3", type=sc_types.NODE_CONST_ROLE))[0]
+            initiated_node = client.resolve_keynodes(ScIdtfResolveParams(idtf="action_initiated", type=sc_types.NODE_CONST_CLASS))[0]
+            action_agent = client.resolve_keynodes(ScIdtfResolveParams(idtf=action_name, type=sc_types.NODE_CONST_CLASS))[0]
 
+            main_node = get_node(client)
 
-            rrel_1 =client .resolve_keynodes (ScIdtfResolveParams (idtf ="rrel_1",type =sc_types .NODE_CONST_ROLE ))[0 ]
-            rrel_2 =client .resolve_keynodes (ScIdtfResolveParams (idtf ="rrel_2",type =sc_types .NODE_CONST_ROLE ))[0 ]
-            rrel_3 =client .resolve_keynodes (ScIdtfResolveParams (idtf ="rrel_3",type =sc_types .NODE_CONST_ROLE ))[0 ]
-            initiated_node =client .resolve_keynodes (ScIdtfResolveParams (idtf ="action_initiated",type =sc_types .NODE_CONST_CLASS ))[0 ]
-            action_agent =client .resolve_keynodes (ScIdtfResolveParams (idtf =action_name ,type =sc_types .NODE_CONST_CLASS ))[0 ]
+            template = ScTemplate()
+            template.triple_with_relation(main_node, sc_types.EDGE_ACCESS_VAR_POS_PERM, user_sc_addr, sc_types.EDGE_ACCESS_VAR_POS_PERM, rrel_1)
+            template.triple_with_relation(main_node, sc_types.EDGE_ACCESS_VAR_POS_PERM, topic_addr, sc_types.EDGE_ACCESS_VAR_POS_PERM, rrel_2)
+            template.triple_with_relation(main_node, sc_types.EDGE_ACCESS_VAR_POS_PERM, message_link, sc_types.EDGE_ACCESS_VAR_POS_PERM, rrel_3)
 
+            if image_base64:
+                rrel_4 = client.resolve_keynodes(ScIdtfResolveParams(idtf="rrel_4", type=sc_types.NODE_CONST_ROLE))[0]
+                rrel_5 = client.resolve_keynodes(ScIdtfResolveParams(idtf="rrel_5", type=sc_types.NODE_CONST_ROLE))[0]
+                rrel_6 = client.resolve_keynodes(ScIdtfResolveParams(idtf="rrel_6", type=sc_types.NODE_CONST_ROLE))[0]
+                base64_link = create_link(client, image_base64)
+                name_link = create_link(client, image_name or "image.jpg")
+                mime_link = create_link(client, image_mime or "image/jpeg")
+                template.triple_with_relation(main_node, sc_types.EDGE_ACCESS_VAR_POS_PERM, base64_link, sc_types.EDGE_ACCESS_VAR_POS_PERM, rrel_4)
+                template.triple_with_relation(main_node, sc_types.EDGE_ACCESS_VAR_POS_PERM, name_link, sc_types.EDGE_ACCESS_VAR_POS_PERM, rrel_5)
+                template.triple_with_relation(main_node, sc_types.EDGE_ACCESS_VAR_POS_PERM, mime_link, sc_types.EDGE_ACCESS_VAR_POS_PERM, rrel_6)
 
-            main_node =get_node (client )
+            template.triple(action_agent, sc_types.EDGE_ACCESS_VAR_POS_PERM, main_node)
+            template.triple(initiated_node, sc_types.EDGE_ACCESS_VAR_POS_PERM, main_node)
 
-            template =ScTemplate ()
-            template .triple_with_relation (
-            main_node ,
-            sc_types .EDGE_ACCESS_VAR_POS_PERM ,
-            user ,
-            sc_types .EDGE_ACCESS_VAR_POS_PERM ,
-            rrel_1 
+            event_params = ScEventSubscriptionParams(main_node, ScEventType.AFTER_GENERATE_INCOMING_ARC, call_back)
+            client.events_create(event_params)
+            client.template_generate(template)
+
+            global payload
+            payload = None
+            if callback_event.wait(timeout=10):
+                while not payload:
+                    continue
+                return payload
+            else:
+                raise AgentError(524, "Timeout")
+        else:
+            raise ScServerError()
+        
+    def find_user_node_by_login(self, login: str) -> ScAddr:
+        """Находит узел пользователя в SC-памяти по логину/email"""
+        try:
+            nrel_system_identifier = client.resolve_keynodes(
+                ScIdtfResolveParams(idtf="nrel_system_identifier", type=sc_types.NODE_CONST_NOROLE)
+            )[0]
+            registered_user = client.resolve_keynodes(
+                ScIdtfResolveParams(idtf="registered_jurisprudence_user", type=sc_types.NODE_CONST_CLASS)
+            )[0]
+
+            # Ищем все узлы зарегистрированных пользователей
+            users_template = ScTemplate()
+            users_template.triple(
+                registered_user,
+                sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                sc_types.NODE_VAR >> "_user"
             )
-            template .triple_with_relation (
-            main_node ,
-            sc_types .EDGE_ACCESS_VAR_POS_PERM ,
-            topic_addr ,
-            sc_types .EDGE_ACCESS_VAR_POS_PERM ,
-            rrel_2 
+            users_result = client.template_search(users_template)
+
+            for item in users_result:
+                user_addr = item.get("_user")
+
+                # Проверяем email/логин через nrel_system_identifier
+                id_template = ScTemplate()
+                id_template.triple(
+                    user_addr,
+                    sc_types.EDGE_D_COMMON_VAR >> "_id_arc",
+                    sc_types.LINK_VAR >> "_id_link"
+                )
+                id_template.triple(
+                    nrel_system_identifier,
+                    sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                    "_id_arc"
+                )
+                id_result = client.template_search(id_template)
+                if id_result:
+                    stored_login = client.get_link_content(id_result[0].get("_id_link"))[0].data
+                    if stored_login == login:
+                        return user_addr
+
+            print(f"DEBUG: User node not found for login: {login}")
+            return None
+
+        except Exception as e:
+            print(f"Error finding user node: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+        
+    def call_rate_message_agent(self, action_name: str, message_addr: ScAddr, rating_type: str):
+        if is_connected():
+            rating_link = create_link(client, rating_type)
+            rrel1 = client.resolve_keynodes(ScIdtfResolveParams(idtf="rrel_1", type=sc_types.NODE_CONST_ROLE))[0]
+            rrel2 = client.resolve_keynodes(ScIdtfResolveParams(idtf="rrel_2", type=sc_types.NODE_CONST_ROLE))[0]
+            initiated_node = client.resolve_keynodes(ScIdtfResolveParams(idtf="action_initiated", type=sc_types.NODE_CONST_CLASS))[0]
+            action_agent = client.resolve_keynodes(ScIdtfResolveParams(idtf=action_name, type=sc_types.NODE_CONST_CLASS))[0]
+            main_node = get_node(client)
+
+            template = ScTemplate()
+            template.triple_with_relation(main_node, sc_types.EDGE_ACCESS_VAR_POS_PERM, message_addr, sc_types.EDGE_ACCESS_VAR_POS_PERM, rrel1)
+            template.triple_with_relation(main_node, sc_types.EDGE_ACCESS_VAR_POS_PERM, rating_link, sc_types.EDGE_ACCESS_VAR_POS_PERM, rrel2)
+            template.triple(action_agent, sc_types.EDGE_ACCESS_VAR_POS_PERM, main_node)
+            template.triple(initiated_node, sc_types.EDGE_ACCESS_VAR_POS_PERM, main_node)
+
+            event_params = ScEventSubscriptionParams(main_node, ScEventType.AFTER_GENERATE_INCOMING_ARC, call_back)
+            client.events_create(event_params)
+            client.template_generate(template)
+
+            global payload
+            payload = None
+            if callback_event.wait(timeout=10):
+                while not payload:
+                    continue
+                return payload
+            else:
+                raise AgentError(524, "Timeout")
+        else:
+            raise ScServerError
+        
+    def call_delete_message_agent(self, action_name: str, message_addr: ScAddr):
+        if is_connected():
+            rrel_1 = client.resolve_keynodes(
+                ScIdtfResolveParams(idtf="rrel_1", type=sc_types.NODE_CONST_ROLE)
+            )[0]
+            initiated_node = client.resolve_keynodes(
+                ScIdtfResolveParams(idtf="action_initiated", type=sc_types.NODE_CONST_CLASS)
+            )[0]
+            action_agent = client.resolve_keynodes(
+                ScIdtfResolveParams(idtf=action_name, type=sc_types.NODE_CONST_CLASS)
+            )[0]
+
+            main_node = get_node(client)
+
+            template = ScTemplate()
+            template.triple_with_relation(
+                main_node, sc_types.EDGE_ACCESS_VAR_POS_PERM, message_addr,
+                sc_types.EDGE_ACCESS_VAR_POS_PERM, rrel_1
             )
-            template .triple_with_relation (
-            main_node ,
-            sc_types .EDGE_ACCESS_VAR_POS_PERM ,
-            message_link ,
-            sc_types .EDGE_ACCESS_VAR_POS_PERM ,
-            rrel_3 
+            template.triple(action_agent, sc_types.EDGE_ACCESS_VAR_POS_PERM, main_node)
+            template.triple(initiated_node, sc_types.EDGE_ACCESS_VAR_POS_PERM, main_node)
+
+            global payload
+            payload = None
+            callback_event.clear()
+
+            event_params = ScEventSubscriptionParams(
+                main_node, ScEventType.AFTER_GENERATE_INCOMING_ARC, call_back  # <-- call_back, не callback
             )
-            template .triple (action_agent ,sc_types .EDGE_ACCESS_VAR_POS_PERM ,main_node )
-            template .triple (initiated_node ,sc_types .EDGE_ACCESS_VAR_POS_PERM ,main_node )
+            client.events_create(event_params)
+            client.template_generate(template)
 
-            event_params =ScEventSubscriptionParams (main_node ,ScEventType .AFTER_GENERATE_INCOMING_ARC ,call_back )
-            client .events_create (event_params )
-            client .template_generate (template )
+            if callback_event.wait(timeout=10):
+                while not payload:
+                    continue
+                return payload
+            else:
+                raise AgentError(524, "Timeout")
+        else:
+            raise ScServerError
+        
+    def call_edit_message_agent(self, action_name: str, message_addr: ScAddr, new_text: str):
+        if is_connected():
+            new_content_link = create_link(client, new_text)
 
-            global payload 
-            payload =None 
-            if callback_event .wait (timeout =10 ):
-                while not payload :
-                    continue 
-                return payload 
-            else :
-                raise AgentError (524 ,"Timeout")
-        else :
-            raise ScServerError ()
+            rrel1 = client.resolve_keynodes(ScIdtfResolveParams(idtf="rrel_1", type=sc_types.NODE_CONST_ROLE))[0]
+            rrel2 = client.resolve_keynodes(ScIdtfResolveParams(idtf="rrel_2", type=sc_types.NODE_CONST_ROLE))[0]
+            initiated_node = client.resolve_keynodes(ScIdtfResolveParams(idtf="action_initiated", type=sc_types.NODE_CONST_CLASS))[0]
+            action_agent = client.resolve_keynodes(ScIdtfResolveParams(idtf=action_name, type=sc_types.NODE_CONST_CLASS))[0]
+            main_node = get_node(client)
 
+            template = ScTemplate()
+            template.triple_with_relation(main_node, sc_types.EDGE_ACCESS_VAR_POS_PERM, message_addr,
+                                        sc_types.EDGE_ACCESS_VAR_POS_PERM, rrel1)
+            template.triple_with_relation(main_node, sc_types.EDGE_ACCESS_VAR_POS_PERM, new_content_link,
+                                        sc_types.EDGE_ACCESS_VAR_POS_PERM, rrel2)
+            template.triple(action_agent, sc_types.EDGE_ACCESS_VAR_POS_PERM, main_node)
+            template.triple(initiated_node, sc_types.EDGE_ACCESS_VAR_POS_PERM, main_node)
 
+            global payload
+            payload = None
+            callback_event.clear()
+            event_params = ScEventSubscriptionParams(main_node, ScEventType.AFTER_GENERATE_INCOMING_ARC, call_back)
+            client.events_create(event_params)
+            client.template_generate(template)
+
+            if callback_event.wait(timeout=10):
+                while not payload:
+                    continue
+                return payload
+            else:
+                raise AgentError(524, "Timeout")
+        else:
+            raise ScServerError
+
+    def get_topic_messages_sorted(self, topic_addr: ScAddr, sort_type: str = 'by_date'):
+        """
+        Получает сообщения топика с сортировкой и выделением лучшего.
+        sort_type: 'by_date' | 'by_rating' | 'by_relevance'
+        """
+        messages = self.get_topic_messages(topic_addr)
+
+        if sort_type == 'by_rating':
+            messages.sort(key=lambda m: m.get('likes', 0) - m.get('dislikes', 0), reverse=True)
+        elif sort_type == 'by_date':
+            # Порядок из sc-памяти считается хронологическим (как сейчас)
+            pass
+        elif sort_type == 'by_relevance':
+            # Комбинированная: сначала по рейтингу, потом по дате
+            messages.sort(key=lambda m: m.get('likes', 0) - m.get('dislikes', 0), reverse=True)
+
+        # Определяем лучшее сообщение (максимальный рейтинг)
+        best_message_addr = None
+        if messages:
+            best = max(messages, key=lambda m: m.get('likes', 0) - m.get('dislikes', 0))
+            if best.get('likes', 0) - best.get('dislikes', 0) > 0:
+                best_message_addr = best['addr']
+                # Если сортировка не by_rating — переставляем лучшее в начало
+                if sort_type == 'by_date':
+                    messages = [best] + [m for m in messages if m['addr'] != best_message_addr]
+
+        return {
+            'messages': messages,
+            'best_message_addr': best_message_addr
+        }
+    
+
+    def call_filter_messages_agent(self, action_name: str, topic_addr: ScAddr) -> set:
+        if not is_connected():
+            raise ScServerError()
+
+        global payload
+        payload = None
+
+        rrel_1 = client.resolve_keynodes(
+            ScIdtfResolveParams(idtf='rrel_1', type=sc_types.NODE_CONST_ROLE)
+        )[0]
+        initiated_node = client.resolve_keynodes(
+            ScIdtfResolveParams(idtf='action_initiated', type=sc_types.NODE_CONST_CLASS)
+        )[0]
+        action_agent = client.resolve_keynodes(
+            ScIdtfResolveParams(idtf=action_name, type=sc_types.NODE_CONST_CLASS)
+        )[0]
+        main_node = get_node(client)
+
+        template = ScTemplate()
+        template.triple_with_relation(
+            main_node >> "_main_node",
+            sc_types.EDGE_ACCESS_VAR_POS_PERM,
+            topic_addr,
+            sc_types.EDGE_ACCESS_VAR_POS_PERM,
+            rrel_1
+        )
+        template.triple(action_agent, sc_types.EDGE_ACCESS_VAR_POS_PERM, "_main_node")
+        template.triple(initiated_node, sc_types.EDGE_ACCESS_VAR_POS_PERM, "_main_node")
+
+        event_params = ScEventSubscriptionParams(
+            main_node, ScEventType.AFTER_GENERATE_INCOMING_ARC, callback_filter_messages
+        )
+        client.events_create(event_params)
+        client.template_generate(template)
+
+        if callback_event.wait(timeout=10):
+            while not payload:
+                continue
+            return payload.get("expert_addrs", set())
+        else:
+            raise AgentError(524, "Timeout")
+        
+    
     def get_all_topics (self ):
         """Получает список всех топиков форума"""
         if is_connected ():
@@ -1776,96 +2041,237 @@ class Ostis :
             raise ScServerError ()
 
 
-    def get_topic_messages (self ,topic_addr :ScAddr ):
+    def get_topic_messages(self, topic_addr: ScAddr):
         """Получает все сообщения топика"""
-        if is_connected ():
-            try :
-                concept_message =client .resolve_keynodes (ScIdtfResolveParams (idtf ="concept_message",type =sc_types .NODE_CONST_CLASS ))[0 ]
-                nrel_message_content =client .resolve_keynodes (ScIdtfResolveParams (idtf ="nrel_message_content",type =sc_types .NODE_CONST_NOROLE ))[0 ]
-                nrel_message_author =client .resolve_keynodes (ScIdtfResolveParams (idtf ="nrel_message_author",type =sc_types .NODE_CONST_NOROLE ))[0 ]
+        if is_connected():
+            try:
+                concept_message = client.resolve_keynodes(
+                    ScIdtfResolveParams(idtf="concept_message", type=sc_types.NODE_CONST_CLASS)
+                )[0]
+                nrel_message_content = client.resolve_keynodes(
+                    ScIdtfResolveParams(idtf="nrel_message_content", type=sc_types.NODE_CONST_NOROLE)
+                )[0]
+                nrel_message_author = client.resolve_keynodes(
+                    ScIdtfResolveParams(idtf="nrel_author", type=sc_types.NODE_CONST_NOROLE)
+                )[0]
+                concept_specialist = client.resolve_keynodes(
+                    ScIdtfResolveParams(idtf="concept_specialist", type=sc_types.NODE_CONST_CLASS)
+                )[0]
+                nrel_message_attachment = client.resolve_keynodes(
+                    ScIdtfResolveParams(idtf="nrel_message_attachment", type=sc_types.NODE_CONST_NOROLE)
+                )[0]
+                nrel_attachment_data = client.resolve_keynodes(
+                    ScIdtfResolveParams(idtf="nrel_attachment_data", type=sc_types.NODE_CONST_NOROLE)
+                )[0]
+                nrel_attachment_mime = client.resolve_keynodes(
+                    ScIdtfResolveParams(idtf="nrel_attachment_mime", type=sc_types.NODE_CONST_NOROLE)
+                )[0]
 
-                print (f"DEBUG: Looking for messages in topic {topic_addr }")
+                print(f"DEBUG: Looking for messages in topic {topic_addr}")
 
-
-                template =ScTemplate ()
-                template .triple (
-                topic_addr ,
-                sc_types .EDGE_ACCESS_VAR_POS_PERM >>"_msg_arc",
-                sc_types .NODE_VAR >>"_message"
+                template = ScTemplate()
+                template.triple(
+                    topic_addr,
+                    sc_types.EDGE_ACCESS_VAR_POS_PERM >> "_msg_arc",
+                    sc_types.NODE_VAR >> "_message"
                 )
-                template .triple (
-                concept_message ,
-                sc_types .EDGE_ACCESS_VAR_POS_PERM ,
-                "_message"
+                template.triple(
+                    concept_message,
+                    sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                    "_message"
                 )
 
-                result =client .template_search (template )
-                print (f"DEBUG: Found {len (result )} messages")
-                messages =[]
+                result = client.template_search(template)
+                print(f"DEBUG: Found {len(result)} messages")
+                messages = []
 
-                for item in result :
-                    message_addr =item .get ("_message")
-                    print (f"DEBUG: Processing message {message_addr }")
+                for item in result:
+                    message_addr = item.get("_message")
+                    print(f"DEBUG: Processing message {message_addr}")
 
-
-                    content_template =ScTemplate ()
-                    content_template .triple (
-                    message_addr ,
-                    sc_types .EDGE_D_COMMON_VAR >>"_content_arc",
-                    sc_types .LINK_VAR >>"_content_link"
+                    # Контент
+                    content_template = ScTemplate()
+                    content_template.triple(
+                        message_addr,
+                        sc_types.EDGE_D_COMMON_VAR >> "_content_arc",
+                        sc_types.LINK_VAR >> "_content_link"
                     )
-                    content_template .triple (
-                    nrel_message_content ,
-                    sc_types .EDGE_ACCESS_VAR_POS_PERM ,
-                    "_content_arc"
+                    content_template.triple(
+                        nrel_message_content,
+                        sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                        "_content_arc"
                     )
+                    content_result = client.template_search(content_template)
+                    content = ""
+                    if content_result:
+                        content_link = content_result[0].get("_content_link")
+                        content = client.get_link_content(content_link)[0].data
+                        print(f"DEBUG: Message content: {content}")
+                    else:
+                        print(f"DEBUG: No content found for message {message_addr}")
 
-                    content_result =client .template_search (content_template )
-                    content =""
-                    if content_result :
-                        content_link =content_result [0 ].get ("_content_link")
-                        content =client .get_link_content (content_link )[0 ].data 
-                        print (f"DEBUG: Message content: {content }")
-                    else :
-                        print (f"DEBUG: No content found for message {message_addr }")
+                    # Автор — ищем любой узел связанный с сообщением который является пользователем
+                    author_display = "Unknown"
+                    is_expert = False
 
+                    concept_user = client.resolve_keynodes(
+                        ScIdtfResolveParams(idtf="concept_user", type=sc_types.NODE_CONST_CLASS)
+                    )[0]
+                    concept_verified_user = client.resolve_keynodes(
+                        ScIdtfResolveParams(idtf="concept_verified_user", type=sc_types.NODE_CONST_CLASS)
+                    )[0]
 
-                    author_template =ScTemplate ()
-                    author_template .triple (
-                    message_addr ,
-                    sc_types .EDGE_D_COMMON_VAR >>"_author_arc",
-                    sc_types .NODE_VAR >>"_author"
+                    # Перебираем все исходящие дуги сообщения к узлам
+                    outgoing_tmpl = ScTemplate()
+                    outgoing_tmpl.triple(
+                        message_addr,
+                        sc_types.EDGE_D_COMMON_VAR,
+                        sc_types.NODE_VAR >> "_candidate"
                     )
-                    author_template .triple (
-                    nrel_message_author ,
-                    sc_types .EDGE_ACCESS_VAR_POS_PERM ,
-                    "_author_arc"
+                    candidates = client.template_search(outgoing_tmpl)
+
+                    author_addr = None
+                    for c in candidates:
+                        candidate = c.get("_candidate")
+                        # Проверяем что это пользователь
+                        for user_class in [concept_verified_user, concept_user]:
+                            check = ScTemplate()
+                            check.triple(
+                                user_class,
+                                sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                                candidate
+                            )
+                            if client.template_search(check):
+                                author_addr = candidate
+                                break
+                        if author_addr:
+                            break
+
+                    if author_addr:
+                        author_display = self.format_user_display(author_addr)
+                        specialist_template = ScTemplate()
+                        specialist_template.triple(
+                            concept_specialist,
+                            sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                            author_addr
+                        )
+                        is_expert = len(client.template_search(specialist_template)) > 0
+                    else:
+                        print(f"DEBUG: No author found for message {message_addr}")
+
+                    # Лайки
+                    likes = 0
+                    nrel_likes = client.resolve_keynodes(
+                        ScIdtfResolveParams(idtf="nrel_likes", type=sc_types.NODE_CONST_NOROLE)
+                    )[0]
+                    likes_template = ScTemplate()
+                    likes_template.quintuple(
+                        message_addr,
+                        sc_types.EDGE_D_COMMON_VAR,
+                        sc_types.LINK_VAR >> "_likes_link",
+                        sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                        nrel_likes
                     )
+                    likes_result = client.template_search(likes_template)
+                    if likes_result:
+                        likes_link = likes_result[0].get("_likes_link")
+                        try:
+                            likes = int(client.get_link_content(likes_link)[0].data)
+                        except:
+                            likes = 0
 
-                    author_result =client .template_search (author_template )
-                    author_display ="Unknown"
-                    if author_result :
-                        author_addr =author_result [0 ].get ("_author")
-                        author_display =self .format_user_display (author_addr )
-                        print (f"DEBUG: Message author: {author_display }")
-                    else :
-                        print (f"DEBUG: No author found for message {message_addr }")
+                    # Дизлайки
+                    dislikes = 0
+                    nrel_dislikes = client.resolve_keynodes(
+                        ScIdtfResolveParams(idtf="nrel_dislikes", type=sc_types.NODE_CONST_NOROLE)
+                    )[0]
+                    dislikes_template = ScTemplate()
+                    dislikes_template.quintuple(
+                        message_addr,
+                        sc_types.EDGE_D_COMMON_VAR,
+                        sc_types.LINK_VAR >> "_dislikes_link",
+                        sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                        nrel_dislikes
+                    )
+                    dislikes_result = client.template_search(dislikes_template)
+                    if dislikes_result:
+                        dislikes_link = dislikes_result[0].get("_dislikes_link")
+                        try:
+                            dislikes = int(client.get_link_content(dislikes_link)[0].data)
+                        except:
+                            dislikes = 0
 
-                    messages .append ({
-                    'content':content ,
-                    'author':author_display 
+                    # Вложение (фото)
+                    image_base64 = None
+                    image_mime = None
+                    attach_template = ScTemplate()
+                    attach_template.triple(
+                        message_addr,
+                        sc_types.EDGE_D_COMMON_VAR >> "_attach_arc",
+                        sc_types.NODE_VAR >> "_attach_node"
+                    )
+                    attach_template.triple(
+                        nrel_message_attachment,
+                        sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                        "_attach_arc"
+                    )
+                    attach_result = client.template_search(attach_template)
+                    if attach_result:
+                        attach_node = attach_result[0].get("_attach_node")
+
+                        data_template = ScTemplate()
+                        data_template.triple(
+                            attach_node,
+                            sc_types.EDGE_D_COMMON_VAR >> "_data_arc",
+                            sc_types.LINK_VAR >> "_data_link"
+                        )
+                        data_template.triple(
+                            nrel_attachment_data,
+                            sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                            "_data_arc"
+                        )
+                        data_result = client.template_search(data_template)
+                        if data_result:
+                            image_base64 = client.get_link_content(data_result[0].get("_data_link"))[0].data
+
+                        mime_template = ScTemplate()
+                        mime_template.triple(
+                            attach_node,
+                            sc_types.EDGE_D_COMMON_VAR >> "_mime_arc",
+                            sc_types.LINK_VAR >> "_mime_link"
+                        )
+                        mime_template.triple(
+                            nrel_attachment_mime,
+                            sc_types.EDGE_ACCESS_VAR_POS_PERM,
+                            "_mime_arc"
+                        )
+                        mime_result = client.template_search(mime_template)
+                        if mime_result:
+                            image_mime = client.get_link_content(mime_result[0].get("_mime_link"))[0].data
+
+                        print(f"DEBUG: Attachment found, mime={image_mime}")
+
+                    messages.append({
+                        'content': content,
+                        'author': author_display,
+                        'addr': message_addr.value,
+                        'likes': likes,
+                        'dislikes': dislikes,
+                        'is_expert': is_expert,
+                        'image_base64': image_base64,
+                        'image_mime': image_mime,
                     })
 
-                print (f"DEBUG: Returning {len (messages )} messages")
-                return messages 
+                print(f"DEBUG: Returning {len(messages)} messages")
+                return messages
 
-            except Exception as e :
-                print (f"Error getting messages: {e }")
-                import traceback 
-                traceback .print_exc ()
+            except Exception as e:
+                print(f"Error getting messages: {e}")
+                import traceback
+                traceback.print_exc()
                 return []
-        else :
-            raise ScServerError ()
+        else:
+            raise ScServerError()
 
 
 
@@ -3200,3 +3606,23 @@ class OstisNotesAgent(NotesAgent):
         except:
             pass
         return ''
+
+
+class OstisDeleteMessageAgent:
+    def __init__(self):
+        self.ostis = Ostis(Config.OSTIS_URL)
+
+    def delete_message_agent(self, message_addr: ScAddr) -> dict:
+        try:
+            global payload
+            payload = None
+            agent_response = self.ostis.call_delete_message_agent(
+                action_name="action_delete_message",
+                message_addr=message_addr
+            )
+            if agent_response and agent_response.get("message") == result.SUCCESS:
+                return {"status": "valid"}
+            return {"status": "error", "message": "Agent failed"}
+        except Exception as e:
+            print(f"Error in delete_message_agent: {e}")
+            return {"status": "error", "message": str(e)}
