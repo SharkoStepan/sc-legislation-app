@@ -3,22 +3,56 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Форум - Юридический ассистент</title>
+    <title>Форум</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles/forum.css') }}">
 </head>
 <body>
+    {% macro topic_card(topic) %}
+        <div
+            class="topic-card"
+            role="link"
+            tabindex="0"
+            onclick="window.location.href='{{ url_for('main.forum_topic', topic_addr=topic.addr) }}'"
+            onkeydown="if (event.key === 'Enter' || event.key === ' ') { window.location.href='{{ url_for('main.forum_topic', topic_addr=topic.addr) }}'; }"
+        >
+            <div class="topic-header">
+                <h3>{{ topic.title }}</h3>
+            </div>
+
+            <p class="topic-author">Автор: {{ topic.author }}</p>
+
+            <div class="topic-card-bottom">
+                <div class="topic-description-area">
+                    {% if topic.description %}
+                        <p class="topic-description-preview">{{ topic.description }}</p>
+                    {% endif %}
+                </div>
+
+                {% if topic.tags %}
+                    <div class="topic-tags-row">
+                        {% for tag in topic.tags %}
+                            <span class="topic-tag-badge">{{ tag.label }}</span>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    {% endmacro %}
+        
+
     <div class="container">
         <header>
             <a href="{{ url_for('main.index') }}">
                 <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Логотип" class="header-logo">
             </a>
+
             <nav>
                 <a href="{{ url_for('main.requests') }}"><button class="nav-button">Запросы</button></a>
                 <a href="{{ url_for('main.directory') }}"><button class="nav-button">Справочник</button></a>
                 <a href="{{ url_for('main.show_calendar') }}"><button class="nav-button">Календарь</button></a>
-                <a href="{{ url_for('main.templates') }}"><button class="nav-button">Шаблоны</button></a>
                 <a href="{{ url_for('main.forum') }}"><button class="nav-button active">Форум</button></a>
             </nav>
+
             <a href="{{ url_for('main.logout') }}">
                 <img src="{{ url_for('static', filename='images/user.png') }}" alt="Пользователь" class="user-icon">
             </a>
@@ -27,40 +61,148 @@
         <main>
             <div class="forum-header">
                 <h1>Форум</h1>
+
                 <a href="{{ url_for('main.forum_create_topic') }}">
-                    <button class="btn-create">+ Создать тему</button>
+                    <button class="btn-create">Создать тему</button>
                 </a>
             </div>
 
-            {% with messages = get_flashed_messages(with_categories=true) %}
-                {% if messages %}
-                    {% for category, message in messages %}
-                        <div class="alert alert-{{ category }}">
-                            {{ message }}
-                        </div>
-                    {% endfor %}
-                {% endif %}
-            {% endwith %}
+            <form method="get" action="{{ url_for('main.forum') }}" class="forum-search-form">
+                <input type="hidden" name="tab" value="{{ active_tab }}">
+                <input type="hidden" name="mode" value="{{ mode }}">
+                <input type="hidden" name="tag" value="{{ selected_tag }}">
 
-            <div class="topics-container">
-                {% if topics %}
-                    {% for topic in topics %}
-                        <a href="{{ url_for('main.forum_topic', topic_addr=topic.addr) }}" class="topic-card">
-                            <div class="topic-header">
-                                <h3>{{ topic.title }}</h3>
-                            </div>
-                            <p class="topic-author">Автор: {{ topic.author }}</p>
-                        </a>
-                    {% endfor %}
+                <input
+                    type="text"
+                    name="q"
+                    class="forum-search-input"
+                    placeholder="Поиск по смыслу: например, незаконное увольнение, алименты, аренда квартиры..."
+                    value="{{ search_query }}"
+                >
+
+                <button type="submit" class="forum-search-btn">Найти</button>
+
+                {% if search_query %}
+                    <a href="{{ url_for('main.forum', tab=active_tab, mode=mode, tag=selected_tag) }}" class="forum-search-reset">
+                        Сбросить
+                    </a>
+                {% endif %}
+            </form>
+
+            {% if not search_query %}
+                <div class="forum-tabs">
+                    <a href="{{ url_for('main.forum', mode='normal', tab='recommendations') }}"
+                       class="tab-link {% if mode != 'categories' and active_tab == 'recommendations' %}active{% endif %}">
+                        Мои рекомендации
+                    </a>
+
+                    <a href="{{ url_for('main.forum', mode='normal', tab='all') }}"
+                       class="tab-link {% if mode != 'categories' and active_tab == 'all' %}active{% endif %}">
+                        Все обсуждения
+                    </a>
+
+                    <a href="{{ url_for('main.forum', mode='categories', tag='all') }}"
+                       class="tab-link {% if mode == 'categories' %}active{% endif %}">
+                        Категории
+                    </a>
+                </div>
+            {% endif %}
+
+            {% if search_query %}
+                <div class="tab-panel-description">
+                    <p>
+                        Результаты семантического поиска по запросу:
+                        <strong>{{ search_query }}</strong>
+                    </p>
+                </div>
+
+                {% if search_results %}
+                    <div class="topics-container">
+                        {% for topic in search_results %}
+                            {{ topic_card(topic) }}
+                        {% endfor %}
+                    </div>
                 {% else %}
                     <div class="empty-state">
-                        <p>Тем пока нет. Будьте первым, кто создаст обсуждение!</p>
-                        <a href="{{ url_for('main.forum_create_topic') }}">
-                            <button class="btn-primary">Создать первую тему</button>
-                        </a>
+                        <p>По вашему запросу ничего не найдено.</p>
                     </div>
                 {% endif %}
-            </div>
+
+            {% elif mode == 'categories' %}
+                <div class="tab-panel-description">
+                    <p>Выберите категорию, чтобы посмотреть обсуждения только по нужной теме.</p>
+                </div>
+
+                <div class="tag-folders">
+                    <a href="{{ url_for('main.forum', mode='categories', tag='all') }}"
+                       class="tag-folder {% if selected_tag == 'all' %}active{% endif %}">
+                        Все
+                    </a>
+
+                    {% for tag in tag_options %}
+                        {% if tag.key != 'other' %}
+                            <a href="{{ url_for('main.forum', mode='categories', tag=tag.key) }}"
+                               class="tag-folder {% if selected_tag == tag.key %}active{% endif %}">
+                                {{ tag.label }}
+                            </a>
+                        {% endif %}
+                    {% endfor %}
+
+                    <a href="{{ url_for('main.forum', mode='categories', tag='other') }}"
+                       class="tag-folder {% if selected_tag == 'other' %}active{% endif %}">
+                        Другое
+                    </a>
+                </div>
+
+                {% if all_topics %}
+                    <div class="topics-container">
+                        {% for topic in all_topics %}
+                            {{ topic_card(topic) }}
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="empty-state">
+                        <p>В выбранной категории пока нет обсуждений.</p>
+                    </div>
+                {% endif %}
+
+            {% elif active_tab == 'recommendations' %}
+                <div class="tab-panel-description">
+                    <p>Подборка формируется на основе истории ваших просмотров и обратной связи по рекомендациям.</p>
+                </div>
+
+                {% if has_history %}
+                    {% if recommended_topics %}
+                        <div class="topics-container">
+                            {% for topic in recommended_topics %}
+                                {{ topic_card(topic) }}
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="empty-state">
+                            <p>Пока персональные рекомендации не сформировались.</p>
+                        </div>
+                    {% endif %}
+                {% else %}
+                    <div class="empty-state">
+                        <p>Пока недостаточно истории просмотров для персональных рекомендаций.</p>
+                        <p>Откройте несколько обсуждений, и система начнёт подбирать темы специально для вас.</p>
+                    </div>
+                {% endif %}
+
+            {% else %}
+                {% if all_topics %}
+                    <div class="topics-container">
+                        {% for topic in all_topics %}
+                            {{ topic_card(topic) }}
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="empty-state">
+                        <p>Обсуждений пока нет.</p>
+                    </div>
+                {% endif %}
+            {% endif %}
         </main>
 
         <footer>
