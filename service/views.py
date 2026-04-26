@@ -940,6 +940,26 @@ def forum_topic(topic_addr):
         from_rec = request.args.get("from_rec")
         feedback_saved = request.args.get("feedback_saved")
 
+        # Применяем фильтры
+        if filter_author:
+            messages = [m for m in messages if filter_author.lower() in m.get('author', '').lower()]
+        if filter_best == 'true':
+            messages = [m for m in messages if m.get('likes', 0) > m.get('dislikes', 0)]
+        if filter_experts == 'true':
+            messages = [m for m in messages if m.get('is_expert')]
+
+        # Определяем лучшее сообщение (до сортировки)
+        best_message_addr = None
+        if messages:
+            best = max(messages, key=lambda m: m.get('likes', 0) - m.get('dislikes', 0))
+            if best.get('likes', 0) > best.get('dislikes', 0):
+                best_message_addr = best.get('addr')
+
+        # Сортировка
+        if sort_type == 'by_rating':
+            messages = sorted(messages, key=lambda m: m.get('likes', 0) - m.get('dislikes', 0), reverse=True)
+        else:
+            messages = sorted(messages, key=lambda m: m.get('addr', 0))
 
         current_messages_text = " ".join(
             message.get("content", "")
@@ -989,7 +1009,12 @@ def forum_topic(topic_addr):
             recommendations=recommendations,
             from_rec=from_rec,
             topic_tags=topic_tags,
-            feedback_saved=feedback_saved
+            feedback_saved=feedback_saved,
+            current_sort=sort_type,
+            filter_author=filter_author,
+            filter_best=filter_best,
+            filter_experts=filter_experts,
+            best_message_addr=best_message_addr,
         )
 
     except Exception as e:
