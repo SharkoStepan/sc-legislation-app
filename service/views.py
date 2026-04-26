@@ -1,7 +1,13 @@
 from flask import Blueprint ,request ,render_template ,redirect ,url_for ,flash ,session, jsonify 
 from flask_login import login_user ,logout_user ,login_required ,current_user 
+from .utils.view_history_db import save_topic_view, get_recent_viewed_topic_ids
 from sc_client .client import get_link_content ,search_by_template 
 from sc_client .models import ScAddr ,ScIdtfResolveParams ,ScTemplate 
+from .utils.recommendation import build_recommendations, build_personalized_recommendations, search_topics_by_semantics
+from .utils.recommendation_feedback_db import save_feedback
+from .utils.topic_tags import classify_topic, TAG_OPTIONS
+from .utils.topic_tags_db import get_topic_tags, save_topic_tags
+
 from .models import (
 find_user_by_username ,
 collect_user_info ,
@@ -495,6 +501,76 @@ def get_user_login_from_current_user ():
 
     return str (current_user .username )
 
+# Возвращение сохранённого тега темы.
+def get_or_create_topic_tags(topic_addr: int, title: str, description: str) -> list[dict]:
+    """
+    Возвращает сохранённые теги темы.
+    Если тегов ещё нет, автоматически определяет до 4 тегов и сохраняет их в SQLite.
+    """
+    saved_tags = get_topic_tags(topic_addr)
+
+    if saved_tags:
+        return saved_tags
+
+    detected_tags = classify_topic(title, description)
+
+    save_topic_tags(
+        topic_addr=topic_addr,
+        tags=detected_tags
+    )
+
+    return [
+        {
+            "key": tag["key"],
+            "label": tag["label"],
+            "confidence": tag["confidence"],
+            "matched_terms": ", ".join(tag.get("matched_terms", [])),
+            "is_primary": index == 0,
+        }
+        for index, tag in enumerate(detected_tags)
+    ]
+
+def build_topic_payload(ostis_instance, topic_addr_value):
+    topic_addr = topic_addr_value if isinstance(topic_addr_value, ScAddr) else ScAddr(topic_addr_value)
+
+    details = ostis_instance.get_topic_details(topic_addr)
+    messages = ostis_instance.get_topic_messages(topic_addr)
+
+    messages_text = " ".join(
+        message.get("content", "")
+        for message in messages[:3]
+    )
+
+    tags = get_or_create_topic_tags(
+        topic_addr=topic_addr.value,
+        title=details.get("title", ""),
+        description=details.get("description", "")
+    )
+
+    primary_tag = tags[0] if tags else None
+
+    return {
+        "addr": topic_addr.value,
+        "title": details.get("title", ""),
+        "author": details.get("author", ""),
+        "description": details.get("description", ""),
+        "messages_text": messages_text,
+        "tags": tags,
+        "primary_tag": primary_tag,
+        "tag_keys": [tag["key"] for tag in tags],
+    }
+
+
+def load_all_topics_with_details(ostis_instance):
+    raw_topics = ostis_instance.get_all_topics()
+    all_topics = []
+
+    for topic in raw_topics:
+        payload = build_topic_payload(ostis_instance, topic["addr"])
+        all_topics.append(payload)
+
+    return all_topics
+
 @main .route ("/test")
 @login_required 
 def test_page ():
@@ -705,23 +781,85 @@ def test_get_answers (question_id ):
         return {"success":False ,"message":str (e )},500 
 
 
+# две вкладки с реками и всеми темами
+@main.route('/forum')
+@login_required
+def forum():
+    """Форум: вкладки, семантический поиск и режим категорий"""
+    try:
+        from .agents.ostis import Ostis
+        from config import Config
 
-@main .route ('/forum')
-@login_required 
-def forum ():
-    """Главная страница форума - список топиков"""
-    try :
-        from .agents .ostis import Ostis 
-        from config import Config 
+        username = get_user_login_from_current_user()
+        active_tab = request.args.get("tab", "recommendations")
+        mode = request.args.get("mode", "normal")
+        search_query = request.args.get("q", "").strip()
+        selected_tag = request.args.get("tag", "all")
 
-        ostis_instance =Ostis (Config .OSTIS_URL )
-        topics =ostis_instance .get_all_topics ()
+        ostis_instance = Ostis(Config.OSTIS_URL)
+        all_topics = load_all_topics_with_details(ostis_instance)
 
-        return render_template ('forum.html',topics =topics )
-    except Exception as e :
-        flash (f'Ошибка загрузки форума: {str (e )}','error')
-        return render_template ('forum.html',topics =[])
+        if selected_tag != "all":
+            filtered_topics = [
+                topic for topic in all_topics
+                if selected_tag in topic.get("tag_keys", [])
+            ]
+        else:
+            filtered_topics = all_topics
 
+        viewed_topic_ids = get_recent_viewed_topic_ids(username, limit=7)
+        viewed_topics_map = {topic["addr"]: topic for topic in all_topics}
+        viewed_topics = [
+            viewed_topics_map[topic_id]
+            for topic_id in viewed_topic_ids
+            if topic_id in viewed_topics_map
+        ]
+
+        recommended_topics = build_personalized_recommendations(
+            viewed_topics,
+            all_topics,
+            limit=10
+        ) if viewed_topics else []
+
+        if mode == "categories" and selected_tag != "all":
+            recommended_topics = [
+                topic for topic in recommended_topics
+                if selected_tag in topic.get("tag_keys", [])
+            ]
+
+        search_results = search_topics_by_semantics(
+            search_query,
+            filtered_topics,
+            limit=30
+        ) if search_query else []
+
+        return render_template(
+            'forum.html',
+            active_tab=active_tab,
+            mode=mode,
+            search_query=search_query,
+            search_results=search_results,
+            recommended_topics=recommended_topics,
+            all_topics=filtered_topics,
+            has_history=bool(viewed_topics),
+            selected_tag=selected_tag,
+            tag_options=TAG_OPTIONS
+        )
+
+    except Exception as e:
+        flash(f'Ошибка загрузки форума: {str(e)}', 'error')
+        return render_template(
+            'forum.html',
+            active_tab='all',
+            mode='normal',
+            search_query='',
+            search_results=[],
+            recommended_topics=[],
+            all_topics=[],
+            has_history=False,
+            selected_tag='all',
+            tag_options=TAG_OPTIONS
+        )
 
 @main .route ('/forum/create_topic')
 @login_required 
@@ -771,6 +909,8 @@ def forum_create_topic_post ():
         return redirect (url_for ('main.forum_create_topic'))
 
 
+
+
 @main.route('/forum/topic/<int:topic_addr>')
 @login_required
 def forum_topic(topic_addr):
@@ -785,56 +925,117 @@ def forum_topic(topic_addr):
 
         topic_sc_addr = ScAddr(topic_addr)
         ostis_instance = Ostis(Config.OSTIS_URL)
+
         topic_details = ostis_instance.get_topic_details(topic_sc_addr)
         messages = ostis_instance.get_topic_messages(topic_sc_addr)
 
-        # Фильтрация
-        if filter_author:
-            messages = [m for m in messages if filter_author.lower() in m.get('author', '').lower()]
-        if filter_best == 'true':
-            messages = [m for m in messages if m.get('likes', 0) - m.get('dislikes', 0) > 0]
-        if filter_experts == 'true':
-            messages = [m for m in messages if m.get('is_expert', False)]
+        topic_tags = get_or_create_topic_tags(
+            topic_addr=topic_addr,
+            title=topic_details.get("title", ""),
+            description=topic_details.get("description", "")
 
-        # Сортировка
-        if sort_type == 'by_rating':
-            messages = sorted(
-                messages,
-                key=lambda m: m.get('likes', 0) - m.get('dislikes', 0),
-                reverse=True
+        )
+        username = get_user_login_from_current_user()
+        save_topic_view(username, topic_addr)
+        from_rec = request.args.get("from_rec")
+        feedback_saved = request.args.get("feedback_saved")
+
+
+        current_messages_text = " ".join(
+            message.get("content", "")
+            for message in messages[:3]
+        )
+
+        all_topics_raw = ostis_instance.get_all_topics()
+        all_topics = []
+
+        for topic in all_topics_raw:
+            other_topic_addr = ScAddr(topic["addr"])
+            details = ostis_instance.get_topic_details(other_topic_addr)
+            topic_messages = ostis_instance.get_topic_messages(other_topic_addr)
+
+            messages_text = " ".join(
+                message.get("content", "")
+                for message in topic_messages[:3]
             )
 
-        # Лучшее сообщение
-        best_message_addr = None
-        if messages:
-            best = max(messages, key=lambda m: m.get('likes', 0) - m.get('dislikes', 0))
-            if best.get('likes', 0) - best.get('dislikes', 0) > 0:
-                best_message_addr = best.get('addr')
-                if sort_type == 'by_date':
-                    messages = [best] + [m for m in messages if m.get('addr') != best_message_addr]
+            all_topics.append({
+                "addr": topic["addr"],
+                "title": topic.get("title", ""),
+                "description": details.get("description", ""),
+                "messages_text": messages_text
+            })
 
-        # Список авторов для фильтра
-        all_messages = ostis_instance.get_topic_messages(topic_sc_addr)
-        authors = sorted(set(m.get('author', '') for m in all_messages if m.get('author')))
+        current_topic_for_rec = {
+            "addr": topic_addr,
+            "title": topic_details.get("title", ""),
+            "description": topic_details.get("description", ""),
+            "messages_text": current_messages_text
+        }
 
+        recommendations = build_recommendations(
+            current_topic_for_rec,
+            all_topics,
+            limit=5
+        )
         user_votes = session.get('votes', {})
 
-        return render_template('forum_topic.html',
+        return render_template(
+            'forum_topic.html',
             topic=topic_details,
             messages=messages,
             topic_addr=topic_addr,
             user_votes=user_votes,
-            current_sort=sort_type,
-            best_message_addr=best_message_addr,
-            filter_author=filter_author,
-            filter_best=filter_best,
-            filter_experts=filter_experts,
-            authors=authors
+            recommendations=recommendations,
+            from_rec=from_rec,
+            topic_tags=topic_tags,
+            feedback_saved=feedback_saved
         )
 
     except Exception as e:
         flash(f'Ошибка: {str(e)}', 'error')
         return redirect(url_for('main.forum'))
+    
+#опрос реков
+@main.route('/forum/recommendation_feedback', methods=['POST'])
+@login_required
+def recommendation_feedback():
+    try:
+        username = get_user_login_from_current_user()
+
+        source_topic_addr = int(request.form.get("source_topic_addr"))
+        recommended_topic_addr = int(request.form.get("recommended_topic_addr"))
+        useful = request.form.get("useful")
+
+        if useful not in ("yes", "no"):
+            #flash("Некорректный ответ", "error")
+            return redirect(url_for(
+                'main.forum_topic',
+                topic_addr=recommended_topic_addr,
+                from_rec=source_topic_addr,
+                feedback_saved='0'
+            ))
+
+        save_feedback(
+            username=username,
+            source_topic_addr=source_topic_addr,
+            recommended_topic_addr=recommended_topic_addr,
+            useful=useful
+        )
+
+        #flash(
+        return redirect(url_for(
+            'main.forum_topic',
+            topic_addr=recommended_topic_addr,
+            from_rec=source_topic_addr,
+            feedback_saved= '1'
+        ))
+
+    except Exception as e:
+        #flash
+        return redirect(url_for('main.forum'))  
+    
+
 
 
 @main.route('/forum/topic/<int:topic_addr>/add_message', methods=['POST'])
@@ -910,7 +1111,7 @@ def forum_rate_message(topic_addr, message_addr):
 
         vote_key = str(message_addr)
 
-        # Проверяем — уже голосовал?
+        # Проверяем — уже голосовал
         if vote_key in session['votes']:
             return {'status': 'already_voted', 'voted': session['votes'][vote_key]}, 200
 
