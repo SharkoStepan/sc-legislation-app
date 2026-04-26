@@ -2,6 +2,9 @@ from flask import Flask
 from flask_login import LoginManager 
 from flask_caching import Cache 
 from .encoder import SCJSONEncoder 
+from .utils.recommendation_feedback_db import init_feedback_db
+from .utils.view_history_db import init_view_history_db
+from .utils.topic_tags_db import init_topic_tags_db
 
 login_manager =LoginManager ()
 
@@ -29,5 +32,8 @@ def create_app (config_path :str ='config.Config'):
 
     from .handlers import register_error_handlers 
     register_error_handlers (app )
+    init_feedback_db()
+    init_view_history_db()
+    init_topic_tags_db()
 
     return app 
