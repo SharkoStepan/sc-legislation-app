@@ -10,6 +10,7 @@ collect_user_info ,
 from .utils .string_processing import string_processing
 from .utils .ostis_utils import get_term_titles ,get_event_by_date
 from .utils .article_index import search_articles ,get_article ,get_all_titles
+from .utils .news_reader import get_news ,get_news_sources ,get_news_count
 from .services import (
 auth_agent ,
 reg_agent ,
@@ -411,6 +412,25 @@ def article_view (article_id ):
         title =article ['title'],
         content =article ['content'],
         referrer =referrer ,
+    )
+
+@main .route ("/news")
+def news ():
+    """Страница новостей законодательства (из RSS pravo.by через SQLite)."""
+    source =request .args .get ('source')
+    try :
+        limit =int (request .args .get ('limit',50))
+    except ValueError :
+        limit =50
+    items =get_news (limit =limit ,source =source )
+    sources =get_news_sources ()
+    total =get_news_count ()
+    return render_template (
+        "news.html",
+        items =items ,
+        sources =sources ,
+        selected_source =source ,
+        total =total ,
     )
 
 @main .route ("/directory",methods =['GET','POST'])

@@ -48,6 +48,7 @@
                 <a href="{{ url_for('main.show_calendar') }}"><button class="nav-button">Календарь</button></a>
                 <a href="{{ url_for('main.templates') }}"><button class="nav-button">Шаблоны</button></a>
                 <a href="{{ url_for('main.forum') }}"><button class="nav-button">Форум</button></a>
+            <a href="{{ url_for('main.news') }}"><button class="nav-button">Новости</button></a>
             </nav>
             {% if current_user.is_authenticated %}
             <div style="display:flex;align-items:center;gap:8px;">
