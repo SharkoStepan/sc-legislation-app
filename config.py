@@ -1,10 +1,12 @@
 import configparser 
+import os
 
-
-class Config :
-    config =configparser .ConfigParser ()
-    config .read ('config.ini')
-
+class Config:
+    config = configparser.ConfigParser()
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    config_path = os.path.join(base_dir, 'config.ini')
+    config.read(config_path)
+    
     AGENTS_TO_LOAD ={
     "auth_agent":"service.agents.ostis.OstisAuthAgent",
     "reg_agent":"service.agents.ostis.OstisRegAgent",
@@ -13,7 +15,11 @@ class Config :
     "add_event_agent":"service.agents.ostis.OstisAddEventAgent",
     "delete_event_agent":"service.agents.ostis.OstisDeleteEventAgent",
     "show_event_agent":"service.agents.ostis.OstisShowEventAgent",
-    "test_agent":"service.agents.ostis.OstisTestAgent"
+    "test_agent":"service.agents.ostis.OstisTestAgent",
+    "profile_agent":"service.agents.ostis.OstisProfileAgent",
+    "history_agent":"service.agents.ostis.OstisHistoryAgent",
+    "bookmarks_agent":"service.agents.ostis.OstisBookmarksAgent",
+    "notes_agent":"service.agents.ostis.OstisNotesAgent"
     }
     OSTIS_URL =config ['DEFAULT']['ostis_url']
     PROTOCOL =config ['SERVER']['SC_SERVER_PROTOCOL']

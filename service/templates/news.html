@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Новости законодательства - Юридический ассистент</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', Arial, sans-serif; background-color: #F5F7FA; color: #222349; }
+        .container { max-width: 2000px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; }
+
+        /* Header */
+        header { background-color: #E9E9FD; height: 80px; display: flex; align-items: center; justify-content: space-between; padding: 0 40px; }
+        .header-logo { width: 120px; height: auto; cursor: pointer; transition: transform 0.2s; }
+        .header-logo:hover { transform: scale(1.05); }
+        nav { display: flex; gap: 10px; }
+        .nav-button { background-color: transparent; color: #222349; border: none; padding: 12px 24px; border-radius: 10px; cursor: pointer; font-size: 16px; font-weight: 500; transition: background-color 0.3s ease; }
+        .nav-button:hover { background-color: rgba(255,255,255,0.5); }
+        .nav-button.active { background-color: #FFFFFF; }
+        .user-icon { width: 48px; height: 48px; border-radius: 50%; cursor: pointer; transition: transform 0.2s; }
+        .user-icon:hover { transform: scale(1.1); }
+
+        /* Main */
+        main { flex: 1; padding: 40px; max-width: 1200px; margin: 0 auto; width: 100%; }
+
+        .page-title { font-size: 32px; font-weight: 700; margin-bottom: 8px; color: #222349; }
+        .page-subtitle { font-size: 16px; color: #6B7280; margin-bottom: 32px; }
+
+        /* Filter bar */
+        .filter-bar { display: flex; align-items: center; gap: 16px; margin-bottom: 32px; flex-wrap: wrap; }
+        .filter-bar label { font-size: 15px; font-weight: 500; color: #374151; }
+        .filter-bar select {
+            padding: 10px 16px; border: 1px solid #D1D5DB; border-radius: 10px;
+            font-size: 15px; background: #fff; color: #222349; cursor: pointer;
+            min-width: 260px;
+        }
+        .filter-bar select:focus { outline: 2px solid #4D4FA3; border-color: transparent; }
+        .btn-reset {
+            padding: 10px 20px; background: none; border: 2px solid #4D4FA3;
+            color: #4D4FA3; border-radius: 10px; cursor: pointer; font-size: 14px;
+            font-weight: 500; transition: all 0.2s;
+        }
+        .btn-reset:hover { background: #4D4FA3; color: #fff; }
+        .news-count { margin-left: auto; font-size: 14px; color: #6B7280; }
+
+        /* News cards */
+        .news-grid { display: flex; flex-direction: column; gap: 20px; }
+
+        .news-card {
+            background: #FFFFFF; border-radius: 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.07); padding: 28px 32px;
+            transition: box-shadow 0.2s, transform 0.2s;
+            border-left: 4px solid transparent;
+        }
+        .news-card:hover { box-shadow: 0 4px 16px rgba(77,79,163,0.14); transform: translateY(-2px); border-left-color: #4D4FA3; }
+
+        .card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
+        .card-title { font-size: 18px; font-weight: 600; color: #222349; line-height: 1.4; flex: 1; }
+        .card-title a { color: #222349; text-decoration: none; }
+        .card-title a:hover { color: #4D4FA3; text-decoration: underline; }
+
+        .card-meta { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+        .source-badge {
+            font-size: 12px; font-weight: 600; padding: 4px 12px;
+            border-radius: 20px; background: #E9E9FD; color: #4D4FA3;
+            white-space: nowrap;
+        }
+        .card-date { font-size: 13px; color: #9CA3AF; }
+        .score-badge {
+            font-size: 12px; padding: 4px 10px; border-radius: 20px;
+            background: #F0FDF4; color: #16A34A; font-weight: 600;
+        }
+
+        .card-summary { font-size: 15px; color: #4B5563; line-height: 1.6; margin-bottom: 16px; }
+
+        .card-footer { display: flex; align-items: center; justify-content: flex-end; }
+        .btn-read {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 8px 20px; background: #4D4FA3; color: #fff;
+            border-radius: 8px; font-size: 14px; font-weight: 500;
+            text-decoration: none; transition: background 0.2s;
+        }
+        .btn-read:hover { background: #3b3d8c; }
+
+        /* Empty state */
+        .empty-state {
+            text-align: center; padding: 80px 20px;
+            background: #FFFFFF; border-radius: 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+        }
+        .empty-icon { font-size: 64px; margin-bottom: 20px; }
+        .empty-title { font-size: 22px; font-weight: 600; color: #222349; margin-bottom: 12px; }
+        .empty-text { font-size: 16px; color: #6B7280; line-height: 1.6; max-width: 480px; margin: 0 auto; }
+
+        /* Footer */
+        footer { background-color: #222349; color: #E9E9FD; padding: 30px 20px; text-align: center; margin-top: auto; }
+        footer p { margin: 5px 0; font-size: 14px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <header>
+        <a href="{{ url_for('main.directory') }}">
+            <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Логотип" class="header-logo">
+        </a>
+        <nav>
+            <a href="{{ url_for('main.requests') }}"><button class="nav-button">Запросы</button></a>
+            <a href="{{ url_for('main.directory') }}"><button class="nav-button">Справочник</button></a>
+            <a href="{{ url_for('main.show_calendar') }}"><button class="nav-button">Календарь</button></a>
+            <a href="{{ url_for('main.templates') }}"><button class="nav-button">Шаблоны</button></a>
+            <a href="{{ url_for('main.forum') }}"><button class="nav-button">Форум</button></a>
+            <a href="{{ url_for('main.news') }}"><button class="nav-button active">Новости</button></a>
+        </nav>
+        {% if current_user.is_authenticated %}
+        <div style="display:flex;align-items:center;gap:8px;">
+            <a href="{{ url_for('main.cabinet') }}" title="Личный кабинет">
+                <img src="{{ url_for('static', filename='images/user.png') }}" alt="Личный кабинет" class="user-icon">
+            </a>
+            <a href="{{ url_for('main.logout') }}" title="Выйти">
+                <img src="{{ url_for('static', filename='images/logout.png') }}" alt="Выйти" class="user-icon">
+            </a>
+        </div>
+        {% else %}
+        <a href="{{ url_for('main.auth') }}">
+            <button class="nav-button">Войти</button>
+        </a>
+        {% endif %}
+    </header>
+
+    <main>
+        <div class="page-title">Новости законодательства</div>
+        <div class="page-subtitle">Актуальные изменения в законодательстве Республики Беларусь</div>
+
+        <!-- Фильтр по источнику -->
+        <form method="get" action="{{ url_for('main.news') }}" class="filter-bar">
+            <label for="source-select">Источник:</label>
+            <select id="source-select" name="source" onchange="this.form.submit()">
+                <option value="">Все источники</option>
+                {% for src in sources %}
+                <option value="{{ src }}" {% if src == selected_source %}selected{% endif %}>{{ src }}</option>
+                {% endfor %}
+            </select>
+            {% if selected_source %}
+            <a href="{{ url_for('main.news') }}" class="btn-reset">Сбросить</a>
+            {% endif %}
+            <span class="news-count">
+                {% if total > 0 %}Найдено: {{ items|length }} из {{ total }}{% endif %}
+            </span>
+        </form>
+
+        <!-- Карточки новостей -->
+        {% if items %}
+        <div class="news-grid">
+            {% for item in items %}
+            <div class="news-card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <a href="{{ item.link }}" target="_blank" rel="noopener">{{ item.title }}</a>
+                    </div>
+                </div>
+                <div class="card-meta">
+                    <span class="source-badge">{{ item.feed_source }}</span>
+                    {% if item.published_date %}
+                    <span class="card-date">
+                        {{ item.published_date[:10] if item.published_date else '' }}
+                    </span>
+                    {% endif %}
+                </div>
+                {% if item.summary %}
+                <div class="card-summary">
+                    {{ item.summary[:300] }}{% if item.summary|length > 300 %}...{% endif %}
+                </div>
+                {% endif %}
+                <div class="card-footer">
+                    <a href="{{ item.link }}" target="_blank" rel="noopener" class="btn-read">
+                        Читать на pravo.by →
+                    </a>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        {% else %}
+        <div class="empty-state">
+            <div class="empty-icon">📰</div>
+            <div class="empty-title">Новостей пока нет</div>
+            <div class="empty-text">
+                Служба обновления новостей ещё не запущена или данные ещё не загружены.<br>
+                Новости появятся автоматически через несколько минут после запуска py-сервера.
+            </div>
+        </div>
+        {% endif %}
+    </main>
+
+    <footer>
+        <p>Персональный ассистент по юриспруденции</p>
+        <p>Ostis 2025</p>
+    </footer>
+</div>
+</body>
+</html>

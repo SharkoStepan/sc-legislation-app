@@ -45,3 +45,4 @@ WTForms==3.2.1
 yargy==0.16.0
 email-validator
 Flask-Caching==2.3.0
+sqlalchemy==2.0.49
